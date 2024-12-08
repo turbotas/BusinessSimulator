@@ -1,0 +1,265 @@
+import json
+import asyncio
+import aioconsole
+import os
+from components.agent_manager import AgentManager
+from components.task_queue import TaskQueue
+from components.performance_monitor import PerformanceMonitor
+from components.communication_layer import CommunicationLayer
+
+from dotenv import load_dotenv
+load_dotenv()
+
+class SimulationController:
+    def __init__(self, config_file="config/default_config.json"):
+        """Initialize the simulation controller."""
+        self.running = False
+        self.initializing = False  # Tracks if initialization is ongoing
+        self.config = self.load_config(config_file)
+        self.agent_manager = None
+        self.task_queue = None
+        self.performance_monitor = None
+        self.communication_layer = None
+
+    def load_config(self, file_path):
+        """Load configuration from a JSON file."""
+        try:
+            with open(file_path, "r") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            print(f"Configuration file not found: {file_path}")
+            return {}
+
+    def load_meta_config(self, meta_config_file="config/meta_config.json"):
+        """Load the meta-configuration file."""
+        try:
+            with open(meta_config_file, "r") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            print(f"Meta-config file not found: {meta_config_file}")
+            return {}
+
+    async def initialize(self):
+        """Set up the simulation environment asynchronously."""
+        if self.initializing:
+            print("Initialization is already in progress.")
+            return
+
+        self.initializing = True
+        print("Initializing simulation environment...")
+        self.performance_monitor = PerformanceMonitor(self.config.get("performance_monitor", {}))
+        api_key = os.getenv("OPENAI_API_KEY")
+        self.task_queue = TaskQueue(self.config.get("task_queue", {}))  # Initialize task queue
+        self.communication_layer = CommunicationLayer()  # Initialize communication layer
+        self.agent_manager = AgentManager(
+            self.config.get("agent_manager", {}),
+            self.performance_monitor,
+            api_key,
+            self.communication_layer,
+            self.task_queue  # Pass task queue to agent manager
+        )
+
+        # Load meta-config and initialize agents asynchronously
+        meta_config = self.load_meta_config()
+        try:
+            await self.initialize_agents(meta_config)
+            self.assign_initial_tasks(meta_config)
+            print("Simulation environment initialized.")
+            self.running = True
+        except Exception as e:
+            print(f"Error during initialization: {e}")
+        finally:
+            self.initializing = False
+
+    async def initialize_agents(self, meta_config):
+        """Initialize agents based on the meta-configuration asynchronously."""
+        roles = meta_config.get("roles", [])
+        tasks = []  # Define the tasks list
+        for role in roles:
+            agent_params = {
+                "name": role.get("name", "Unnamed Role"),
+                "description": role.get("description", "No description provided."),
+                "prompt": role.get("prompt", ""),
+                "boss": role.get("boss"),
+                "subordinates": role.get("subordinates", []),
+                "role": role.get("role", "GenericRole"),  # Default role to 'GenericRole' if missing
+            }
+            # Create an async task for each agent spawn
+            tasks.append(asyncio.create_task(self.agent_manager.spawn_agent("BaseAgent", agent_params)))
+
+        # Periodic progress reporting
+        for i, task in enumerate(asyncio.as_completed(tasks), start=1):
+            await task
+            print(f"Initialized {i}/{len(tasks)} agents...")
+
+        # Await all tasks to complete
+        await asyncio.gather(*tasks)
+
+    def assign_initial_tasks(self, meta_config):
+        """Assign initial tasks to agents."""
+        roles = meta_config.get("roles", [])
+        for role in roles:
+            for task_desc in role.get("initial_tasks", []):
+                task = {
+                    "id": len(self.task_queue.get_all_tasks()) + 1,
+                    "description": task_desc,
+                    "priority": "medium",
+                    "role": role["role"],  # Add role for task assignment
+                }
+                self.task_queue.add_task(task)
+
+    async def start_simulation(self):
+        """Start the simulation."""
+        if self.running:
+            print("Simulation is already running.")
+            return
+
+        if self.initializing:
+            print("Simulation is still initializing. Please wait.")
+            return
+
+        print("Starting simulation...")
+        await self.initialize()
+        print("Simulation started.")
+
+    def pause_simulation(self):
+        """Pause the simulation."""
+        if not self.running:
+            print("Simulation is not running.")
+            return
+
+        print("Pausing simulation...")
+        self.running = False
+
+        # Notify all agents to stop their activity loops
+        for agent_id in self.agent_manager.get_active_agents():
+            self.agent_manager.agents[agent_id].stop()
+
+        print("Simulation paused.")
+
+    def resume_simulation(self):
+        """Resume the simulation."""
+        if self.running:
+            print("Simulation is already running.")
+            return
+
+        print("Resuming simulation...")
+        self.running = True
+
+        # Notify all agents to resume their activity loops
+        for agent_id in self.agent_manager.get_active_agents():
+            agent = self.agent_manager.agents[agent_id]
+            if not agent.active: # only restart if the agent was stopped
+                agent.active = True
+                asyncio.create_task(agent.activity_loop())
+
+        print("Simulation resumed.")
+
+    def stop_simulation(self):
+        """Stop the simulation."""
+        if not self.running:
+            print("Simulation is not running.")
+            return
+
+        print("Stopping simulation...")
+        self.running = False
+
+        # Terminate all agents
+        active_agents = self.agent_manager.get_active_agents()
+        for agent_id in active_agents:
+            self.agent_manager.terminate_agent(agent_id)
+
+        # Clear tasks
+        self.task_queue.clear_tasks()
+
+        print("Simulation stopped.")
+
+    async def run_interactive_mode(self):
+        """Run the simulation in interactive mode using asynchronous input."""
+        print("Entering interactive mode. Type 'help' for commands.")
+        while True:
+            try:
+                command = await aioconsole.ainput(">> ")  # Asynchronous input
+                if command == "exit":
+                    print("Exiting simulation.")
+                    break
+                elif command == "help":
+                    self.print_help()
+                elif command == "start":
+                    await self.start_simulation()
+                elif command == "pause":
+                    self.pause_simulation()
+                elif command == "resume":
+                    self.resume_simulation()
+                elif command == "stop":
+                    self.stop_simulation()
+                elif command.startswith("spawn"):
+                    if not self.agent_manager:
+                        print("Simulation not started. Use 'start' command first.")
+                        continue
+                    _, agent_type, *params = command.split()
+                    await self.agent_manager.spawn_agent(agent_type, {"params": params})
+                elif command == "list_agents":
+                    print(self.agent_manager.get_active_agents())
+
+                elif command.startswith("add_task"):
+                    _, *task_parts = command.split(maxsplit=1)
+                    task_desc = " ".join(task_parts)
+                    required_agent = (await aioconsole.ainput("Assign to specific agent (leave blank if none): ")).strip() or None
+                    role = (await aioconsole.ainput("Assign to role (leave blank if none): ")).strip() or None
+
+                    # Delegate to TaskQueue
+                    task = {
+                        "id": len(self.task_queue.get_all_tasks()) + 1,
+                        "description": task_desc,
+                        "priority": "medium",
+                        "required_agent": required_agent,
+                        "role": role,
+                    }
+                    # Add the task
+                    self.task_queue.add_task(task)
+
+                elif command == "list_tasks":
+                    print(self.task_queue.get_all_tasks())
+                    print(self.task_queue.get_completed_tasks())
+                elif command == "metrics":
+                    print(self.performance_monitor.get_system_metrics())
+                elif command == "test_communication":
+                    await self.test_agent_communication()
+                elif command.startswith("command"):
+                    _, agent_id, *agent_command_parts = command.split(maxsplit=2)
+                    agent_command = " ".join(agent_command_parts)
+                    response = await self.agent_manager.send_command_to_agent(agent_id, agent_command, {
+                        "agent_manager": self.agent_manager,
+                        "task_queue": self.task_queue,
+                    })
+                    if response:
+                        print(response)
+                else:
+                    print("Unknown command. Type 'help' for a list of commands.")
+            except Exception as e:
+                print(f"Error in interactive mode: {e}")
+
+    def print_help(self):
+        """Print the list of available commands."""
+        print("""
+Available Commands:
+    start                    - Start the simulation.
+    pause                    - Pause the simulation.
+    resume                   - Resume the simulation.
+    stop                     - Stop the simulation.
+    spawn <type> <params>    - Spawn a new agent with type and optional parameters.
+    list_agents              - List all active agents.
+    add_task <desc>          - Add a new task with optional metadata.
+    list_tasks               - List all tasks in the queue.
+    metrics                  - Show system performance metrics.
+    test_communication       - Test that the communications layer works.
+    command <agent> <command>- Send a command to an agent.
+    help                     - Show this help message.
+    exit                     - Exit the simulation.
+""")
+
+if __name__ == "__main__":
+    controller = SimulationController()
+    asyncio.run(controller.run_interactive_mode())
+

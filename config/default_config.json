@@ -1,0 +1,14 @@
+{
+    "agent_manager": {},
+    "task_queue": {},
+    "performance_monitor": {},
+    "communication_layer": {},
+    "chatgpt_agent": {
+    },
+    "initial_agents": [
+        {"type": "DataAnalystAgent", "params": {"name": "Alice"}}
+    ],
+    "initial_tasks": [
+        {"id": 1, "description": "Analyze customer feedback", "priority": "high"}
+    ]
+}
