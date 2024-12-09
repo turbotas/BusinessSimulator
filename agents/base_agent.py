@@ -13,15 +13,17 @@ class BaseAgent:
         self.communication_layer = communication_layer  # Reference to communication layer
         self.task_queue = task_queue  # Reference to the task queue
         self.active = True  # Controls the agent's activity loop
+        self.message_queue = asyncio.Queue()  # Queue for incoming messages
 
     async def handle_command(self, command, simulation_context):
         """Handle a command given to the agent."""
         try:
-            if command.startswith("communicate"):
+            if command.startswith("message"):
+                # Extract target and message
                 _, target_agent, *message_parts = command.split(maxsplit=2)
                 message = " ".join(message_parts)
-                await self.communication_layer.send_message(self.agent_id, target_agent, message)
-                return f"Message sent to {target_agent}: {message}"
+                # Use send_message to queue the message
+                return await self.send_message(target_agent, message, simulation_context)
 
             elif command == "list_agents":
                 return f"Active agents: {simulation_context['agent_manager'].get_active_agents()}"
@@ -29,35 +31,18 @@ class BaseAgent:
             elif command == "status":
                 return f"{self.agent_id} is currently {self.state}."
 
-            elif command.startswith("assign_task"):
-                _, *task_parts = command.split(maxsplit=1)
-                task_desc = " ".join(task_parts)
-                task = {
-                    "id": len(simulation_context["task_queue"].get_all_tasks()) + 1,
-                    "description": task_desc,
-                    "priority": "medium",
-                }
-                simulation_context["task_queue"].add_task(task)
-                return f"Task assigned: {task}"
-
-            elif command.startswith("request_help"):
-                _, target_agent, *task_parts = command.split(maxsplit=2)
-                task_desc = " ".join(task_parts)
-                await self.communication_layer.send_message(
-                    self.agent_id,
-                    target_agent,
-                    f"Help requested with task: {task_desc}",
-                )
-                return f"Help requested from {target_agent} with task: {task_desc}"
-
             elif command.startswith("broadcast"):
+                # Extract the message
                 _, *message_parts = command.split(maxsplit=1)
                 message = " ".join(message_parts)
+                # Broadcast to all agents
                 active_agents = simulation_context["agent_manager"].get_active_agents()
-                for agent in active_agents:
-                    if agent != self.agent_id:  # Avoid sending to self
-                        await self.communication_layer.send_message(self.agent_id, agent, message)
-                return f"Broadcasted message to all agents: {message}"
+                results = []
+                for agent_id in active_agents:
+                    if agent_id != self.agent_id:  # Avoid sending to self
+                        result = await self.send_message(agent_id, message, simulation_context)
+                        results.append(result)
+                return "Broadcast complete. Results:\n" + "\n".join(results)
 
             else:
                 return f"Unknown command: {command}"
@@ -70,8 +55,16 @@ class BaseAgent:
         print(f"{self.agent_id} is performing task: {task}")
         self.state = "Active"
 
-        # Create a task-specific prompt
-        prompt = f"Task Description: {task['description']}\n{self.params.get('instructions', '')}"
+        # Create a task-specific prompt anchored to the agent's role
+        prompt = (
+            f"You are {self.params.get('name', 'an agent')}, "
+            f"the {self.params.get('description', 'role description not provided')}.\n"
+            f"Your role is to {self.params.get('prompt', 'act within your capacity')}.\n\n"
+            f"Task: {task['description']}\n"
+            "Respond in the context of your role."
+        )
+
+        # Call the AI
         response = await self.query_chatgpt(prompt)
 
         # Process the response
@@ -108,36 +101,50 @@ class BaseAgent:
         except Exception as e:
             return f"Error querying ChatGPT: {str(e)}"
 
-    async def send_message(self, to_agent, message):
-        """Send a message to another agent."""
-        await self.communication_layer.send_message(self.agent_id, to_agent, message)
+    async def send_message(self, to_agent, message, simulation_context):
+        """Send a message to another agent by adding it to their message queue."""
+        target_agent = simulation_context["agent_manager"].agents.get(to_agent)
+        if target_agent:
+            task = {
+                "id": f"msg-{self.agent_id}-{len(target_agent.message_queue._queue) + 1}",
+                "description": f"Message from {self.agent_id}: {message}",
+                "priority": "medium"
+            }
+            await target_agent.message_queue.put(task)
+            print(f"Message sent from {self.agent_id} to {to_agent}: {message}")
+            return f"Message successfully sent to {to_agent}."
+        else:
+            return f"Message failed: {to_agent} not found."
 
     async def receive_message(self, message):
-        """Receive and handle a message."""
+        """Receive and queue a message as a task."""
         print(f"Agent {self.agent_id} received message from {message['from']}: {message['message']}")
-        # Process the message (extend logic as needed)
-        if message["message"].lower() == "status":
-            return f"{self.agent_id} is currently {self.state}."
-        else:
-            return f"Message received: {message['message']}"
+        task = {
+            "id": f"msg-{self.agent_id}-{len(self.message_queue._queue) + 1}",
+            "description": f"Message from {message['from']}: {message['message']}",
+            "priority": "medium"
+        }
+        await self.message_queue.put(task)
+        print(f"Message queued as task for {self.agent_id}: {task}")
 
     async def activity_loop(self):
         """Main activity loop for the agent."""
         print(f"{self.agent_id} active state: {self.active}")
         try:
             while self.active:
-                if not self.active:  # Check in case it was paused mid-loop
-                    break
-                # Fetch the next task matching this agent's role or ID
-                #print(f"{self.agent_id} is polling for tasks...")
-                task = self.task_queue.fetch_task_for_agent(self.agent_id, self.params.get("role"))
+                # Prioritize message queue tasks
+                if not self.message_queue.empty():
+                    task = await self.message_queue.get()
+                else:
+                    # Fetch the next task from the task queue
+                    task = self.task_queue.fetch_task_for_agent(self.agent_id, self.params.get("role"))
+
                 if task:
                     print(f"{self.agent_id} picked up task: {task}")
                     await self.perform_task(task)
                 else:
                     # No task available, idle briefly
-                    #print(f"{self.agent_id} found no tasks. Idling...")
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(1)
         except Exception as e:
             print(f"Error in activity loop for {self.agent_id}: {e}")
         finally:
@@ -146,4 +153,3 @@ class BaseAgent:
     def stop(self):
         """Stop the agent's activity loop."""
         self.active = False
-

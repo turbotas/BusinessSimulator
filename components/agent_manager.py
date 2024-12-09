@@ -11,7 +11,7 @@ class AgentManager:
         self.task_queue = task_queue  # Explicitly store task queue reference
         self.agents = {}  # Dictionary to hold all active agents
         self.agent_tasks = {}  # Store asyncio tasks for agent activity loops
-
+        
     async def send_command_to_agent(self, agent_id, command, simulation_context):
         """Send a command to a specific agent."""
         agent = self.agents.get(agent_id)
@@ -22,7 +22,7 @@ class AgentManager:
         else:
             print(f"Agent {agent_id} not found.")
             return None
-
+            
     async def spawn_agent(self, agent_type, params):
         """Spawn a new agent."""
         role_name = params.get("name", agent_type)
@@ -43,11 +43,11 @@ class AgentManager:
 
         print(f"Spawned agent: {agent_id} with params: {params}")
         return agent_id
-
+        
     def get_active_agents(self):
         """Return a list of active agent IDs."""
         return list(self.agents.keys())
-
+        
     async def assign_task_to_agent(self, agent_id, task):
         """Assign a task to a specific agent."""
         agent = self.agents.get(agent_id)
@@ -65,7 +65,7 @@ class AgentManager:
         else:
             print(f"Agent {agent_id} not found.")
             return None
-
+            
     def terminate_agent(self, agent_id):
         """Terminate an agent."""
         if agent_id in self.agents:

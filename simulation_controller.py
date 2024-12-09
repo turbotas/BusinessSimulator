@@ -2,19 +2,31 @@ import json
 import asyncio
 import aioconsole
 import os
+import argparse
 from components.agent_manager import AgentManager
 from components.task_queue import TaskQueue
 from components.performance_monitor import PerformanceMonitor
 from components.communication_layer import CommunicationLayer
-
 from dotenv import load_dotenv
 load_dotenv()
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run the simulation with a specified meta configuration.")
+    parser.add_argument(
+        "--meta_config",
+        type=str,
+        default="config/meta_config.json",
+        help="Path to the meta configuration file."
+    )
+    args = parser.parse_args()
+
 class SimulationController:
-    def __init__(self, config_file="config/default_config.json"):
+    def __init__(self, config_file="config/default_config.json", meta_config_file="config/meta_config.json"):
         """Initialize the simulation controller."""
         self.running = False
         self.initializing = False  # Tracks if initialization is ongoing
+        self.config_file = config_file
+        self.meta_config_file = meta_config_file
         self.config = self.load_config(config_file)
         self.agent_manager = None
         self.task_queue = None
@@ -30,10 +42,10 @@ class SimulationController:
             print(f"Configuration file not found: {file_path}")
             return {}
 
-    def load_meta_config(self, meta_config_file="config/meta_config.json"):
+    def load_meta_config(self):
         """Load the meta-configuration file."""
         try:
-            with open(meta_config_file, "r") as f:
+            with open(self.meta_config_file, "r") as f:
                 return json.load(f)
         except FileNotFoundError:
             print(f"Meta-config file not found: {meta_config_file}")
@@ -201,7 +213,6 @@ class SimulationController:
                     await self.agent_manager.spawn_agent(agent_type, {"params": params})
                 elif command == "list_agents":
                     print(self.agent_manager.get_active_agents())
-
                 elif command.startswith("add_task"):
                     _, *task_parts = command.split(maxsplit=1)
                     task_desc = " ".join(task_parts)
@@ -218,15 +229,28 @@ class SimulationController:
                     }
                     # Add the task
                     self.task_queue.add_task(task)
-
                 elif command == "list_tasks":
                     print(self.task_queue.get_all_tasks())
                     print(self.task_queue.get_completed_tasks())
                 elif command == "metrics":
                     print(self.performance_monitor.get_system_metrics())
-                elif command == "test_communication":
-                    await self.test_agent_communication()
-                elif command.startswith("command"):
+                elif command.startswith("message"):
+                    if not self.agent_manager:
+                        print("Simulation not started. Use 'start' command first.")
+                        continue
+                    try:
+                        _, agent_id, *message_parts = command.split(maxsplit=2)
+                        message = " ".join(message_parts)
+                        if agent_id not in self.agent_manager.get_active_agents():
+                            print(f"Agent {agent_id} not found.")
+                        else:
+                            await self.agent_manager.agents[agent_id].receive_message(
+                                {"from": "User", "message": message}
+                            )
+                            print(f"Message sent to {agent_id}: {message}")
+                    except ValueError:
+                        print("Usage: message <agent_id> <message>")
+                elif command.startswith("inject"):
                     _, agent_id, *agent_command_parts = command.split(maxsplit=2)
                     agent_command = " ".join(agent_command_parts)
                     response = await self.agent_manager.send_command_to_agent(agent_id, agent_command, {
@@ -253,13 +277,13 @@ Available Commands:
     add_task <desc>          - Add a new task with optional metadata.
     list_tasks               - List all tasks in the queue.
     metrics                  - Show system performance metrics.
-    test_communication       - Test that the communications layer works.
-    command <agent> <command>- Send a command to an agent.
+    message <agent> <message>- Send a message to an agent.
+    inject( was command) <agent> <command>- inject a command into an agent. valid commands are 'message' 'status' 'list_agents' 'broadcast'
     help                     - Show this help message.
     exit                     - Exit the simulation.
 """)
 
 if __name__ == "__main__":
-    controller = SimulationController()
+    controller = SimulationController(meta_config_file=args.meta_config)
     asyncio.run(controller.run_interactive_mode())
 
