@@ -15,12 +15,12 @@ class CommunicationLayer:
         """Send a message from one agent to another."""
         queue = self.get_message_queue(to_agent)
         await queue.put({"from": from_agent, "message": message})
-        print(f"Message sent from {from_agent} to {to_agent}: {message}")
+        #print(f"\033[34mMessage sent from {from_agent} to {to_agent}: {message}\033[0m")
 
     async def receive_message(self, agent_id):
         """Receive a message for an agent."""
         queue = self.get_message_queue(agent_id)
         message = await queue.get()
-        print(f"Message received by {agent_id}: {message}")
+        #print(f"Message received by {agent_id}: {message}")
         return message
 

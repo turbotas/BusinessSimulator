@@ -1,5 +1,6 @@
 from agents.base_agent import BaseAgent
 import asyncio
+from components.communication_layer import CommunicationLayer
 
 class AgentManager:
     def __init__(self, config, performance_monitor, api_key, communication_layer, task_queue):
@@ -28,12 +29,15 @@ class AgentManager:
         role_name = params.get("name", agent_type)
         agent_id = f"{role_name.replace(' ', '_')}_{len(self.agents) + 1}"
 
+        # Get GPT version: use agent-specific or default
+        gpt_version = params.get("gpt_version", self.config.get("chatgpt_agent", {}).get("default_gpt_version", "gpt-4o-mini"))
+
         # Dynamically instantiate the appropriate agent
         if agent_type == "DataAnalystAgent":
             from agents.specific_agent import DataAnalystAgent
-            agent = DataAnalystAgent(agent_id, params, self.api_key, self.communication_layer, self.task_queue)
+            agent = DataAnalystAgent(agent_id, params, self.api_key, self.communication_layer, self.task_queue, gpt_version)
         else:
-            agent = BaseAgent(agent_id, params, self.api_key, self.communication_layer, self.task_queue)
+            agent = BaseAgent(agent_id, params, self.api_key, self, self.task_queue, gpt_version, self.communication_layer)
 
         self.agents[agent_id] = agent
 
@@ -41,7 +45,7 @@ class AgentManager:
         agent_task = asyncio.create_task(agent.activity_loop())
         self.agent_tasks[agent_id] = agent_task
 
-        print(f"Spawned agent: {agent_id} with params: {params}")
+        # print(f"Spawned agent: {agent_id} with params: {params}")
         return agent_id
         
     def get_active_agents(self):

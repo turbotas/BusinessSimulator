@@ -95,6 +95,7 @@ class SimulationController:
                 "boss": role.get("boss"),
                 "subordinates": role.get("subordinates", []),
                 "role": role.get("role", "GenericRole"),  # Default role to 'GenericRole' if missing
+                "gpt_version": role.get("gpt_version", self.config.get("chatgpt_agent", {}).get("default_gpt_version", "gpt-4")),  # Add GPT version
             }
             # Create an async task for each agent spawn
             tasks.append(asyncio.create_task(self.agent_manager.spawn_agent("BaseAgent", agent_params)))
@@ -102,7 +103,8 @@ class SimulationController:
         # Periodic progress reporting
         for i, task in enumerate(asyncio.as_completed(tasks), start=1):
             await task
-            print(f"Initialized {i}/{len(tasks)} agents...")
+            #print(f"Initialized {i}/{len(tasks)} agents...")
+        print(f"Initialized {i} agents...")
 
         # Await all tasks to complete
         await asyncio.gather(*tasks)
@@ -259,6 +261,22 @@ class SimulationController:
                     })
                     if response:
                         print(response)
+                elif command == "flush_tasks":
+                    if not self.task_queue:
+                        print("Simulation not started. Use 'start' command first.")
+                        continue
+                    self.task_queue.flush_tasks()
+                    print("Task queue flushed successfully.")
+                elif command.startswith("terminate_agent"):
+                    if not self.agent_manager:
+                        print("Simulation not started. Use 'start' command first.")
+                        continue
+                    try:
+                        _, agent_id = command.split(maxsplit=1)
+                        result = self.agent_manager.terminate_agent(agent_id)
+                        print(result)
+                    except ValueError:
+                        print("Usage: kill_agent <agent_id>")
                 else:
                     print("Unknown command. Type 'help' for a list of commands.")
             except Exception as e:
@@ -280,6 +298,8 @@ Available Commands:
     message <agent> <message>- Send a message to an agent.
     inject( was command) <agent> <command>- inject a command into an agent. valid commands are 'message' 'status' 'list_agents' 'broadcast'
     help                     - Show this help message.
+    flush_tasks              - Flush all tasks.
+    terminate_agent          - Terminate <agent_id>
     exit                     - Exit the simulation.
 """)
 

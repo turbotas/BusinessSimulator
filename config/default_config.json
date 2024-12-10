@@ -4,6 +4,7 @@
     "performance_monitor": {},
     "communication_layer": {},
     "chatgpt_agent": {
+		"default_gpt_version": "gpt-4o-mini"
     },
     "initial_agents": [
         {"type": "DataAnalystAgent", "params": {"name": "Alice"}}
