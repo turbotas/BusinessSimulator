@@ -7,7 +7,7 @@
             "boss": null,
             "subordinates": ["CTO", "CFO", "COO"],
             "role": "CEO",
-			"gpt_version": "gpt-4o",
+			"gpt_version": "gpt-4o-mini",
             "initial_tasks": [
                 "Describe your role in 50 words, including your reporting structure."
             ]

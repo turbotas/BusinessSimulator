@@ -3,6 +3,7 @@ import asyncio
 
 
 class BaseAgent:
+    MAX_CONVERSATION_LENGTH = 10  # Limit to the last 10 exchanges
     COMMAND_DEFINITIONS = {
         "message": {
             "description": "Send a message to another agent.",
@@ -13,19 +14,19 @@ class BaseAgent:
             "syntax": "list_agents"
         },
         "status": {
-            "description": "Report the current status of the agent.",
+            "description": "Report the current status of the current agent. Normally this is for admin purposes only.",
             "syntax": "status"
         },
         "broadcast": {
-            "description": "Send a message to all other agents.",
+            "description": "Send a message to all other agents. Only use this for important communications that every agent must see. Probably it needs your boss to carry this out.",
             "syntax": "broadcast <message>"
         },
         "flush_tasks": {
-            "description": "Flush the entire task queue accross the organisation.",
+            "description": "Flush the entire task queue accross the organisation. Only carry this out if yopu want the whole organisation to stop.",
             "syntax": "flush_tasks"
         },
         "terminate_agent": {
-            "description": "Terminate and remove a specific agent.",
+            "description": "Terminate and remove a specific agent. Normally this is a HR activity or one of the main officers of the orgnanisation.",
             "syntax": "terminate_agent <agent_id>"
         }
     }
@@ -89,9 +90,8 @@ class BaseAgent:
 
     async def perform_task(self, task):
         """Perform a task using ChatGPT."""
-        print(f"\033[32m{self.agent_id}\033[0m is performing task: {task}")
         self.state = "Active"
-        
+
         # Generate the command help text
         commands_help = "\n".join(
             [f"{cmd}: {info['description']} (Syntax: {info['syntax']})"
@@ -101,63 +101,76 @@ class BaseAgent:
         # Fetch the full list of staff (agents) directly from the AgentManager
         staff_list = ", ".join(self.agent_manager.get_active_agents())
 
-        # Create a task-specific prompt anchored to the agent's role
-        prompt = (
-            f"You are {self.params.get('name', 'an agent')}, "
+        # Construct the fixed introduction
+        intro_context = (
+            f"You are agent {self.params.get('name')}, "
             f"the {self.params.get('description', 'role description not provided')}.\n"
-            f"Your role is: {self.params.get('prompt', 'act within your capacity')}.\n\n"
-            f"Commands you can execute (each command on it's own line) to help you reach your goals:\n{commands_help}\n\n"
-            f"Your direct supervisor is: {self.params.get('boss')}.\n"
-            f"Your direct reports are: {self.subordinates}.\n\n"
-            f"The full list of staff in this organization is: {staff_list}.\n\n"
-            f"Task: {task['description']}\n"
-            "Respond in the context of your role. be precise and succinct.  You should not respond unless you have something useful to say. Your response will not be seen by the other person unless you sent it to them using a command, but you should not sommunicate unless you need to to accomplish your task."
+            f"{self.params.get('prompt', 'act within your capacity')}.\n\n"
+            f"Commands you can execute are:\n{commands_help}. Commands must start on a blank line.  If you have no command, nothing will be done.\n\n"
+            f"Your direct supervisor is: {self.params.get('boss', 'None')}.\n"
+            f"Your direct reports are: {', '.join(self.subordinates)}.\n\n"
+            f"The full list of agents in this organization is: {staff_list}.\n\n"
         )
 
-        # Debug: Print the full prompt
-        #print(f"DEBUG: Full prompt for {self.agent_id}:\n{prompt}\n")
+        # Create task-specific prompt
+        task_prompt = (
+            f"Task: {task['description']}\n"
+            "Respond in the context of your role. Be precise and succinct. Only communicate if necessary to achieve your task.  Do not simply send thankyou messages. Use at least one command in your response unless no action is required, in which case, you should not issue a command.  You may issue multiple commands in one response, as long as each starts on it's own line. Be careful not to issue commands to yourself unless that is required. Do not respond until you have an answer or require more information."
+        )
 
-        # Call the AI
-        response = await self.query_chatgpt(prompt)
+        # Debug: Print the constructed prompt
+        #print(f"DEBUG: Prompt for {self.agent_id}:\n{intro_context + task_prompt}")
 
-        # Process the response
-        result = {
-            "task_id": task["id"],
-            "gpt": self.gpt_version,
-            "response": response
-        }
+        # Query the AI and process the result
+        response = await self.query_chatgpt(intro_context, task_prompt)
 
-        # Process the response:
+        # Append the AI response to conversation history
+        self.append_to_conversation("assistant", response)
+
+        # Process the response as potential commands
         await self.process_ai_response(response)
 
         # Notify the task queue
         self.task_queue.mark_task_completed(task, self.agent_id)
 
         self.state = "Idle"
-        #print(f"{self.agent_id} completed task: {result}")
-        return result
+        return {"task_id": task["id"], "gpt": self.gpt_version, "response": response}
 
-    async def query_chatgpt(self, user_input):
-        """Query ChatGPT with user input and maintain threaded conversation."""
-        # Add user input to the conversation
-        self.conversation.append({"role": "user", "content": user_input})
+    async def query_chatgpt(self, intro_context, task_prompt):
+        """Query ChatGPT with user input and maintain concise conversation history."""
+        # Construct the complete conversation
+        conversation = [{"role": "system", "content": intro_context}]
+        conversation.extend(self.get_conversation_history())
+        conversation.append({"role": "user", "content": task_prompt})
+
+        # Debug: Print the full conversation and confirm what is sent to the AI
+        #print(f"\033[34mDEBUG: Complete conversation for {self.agent_id} being sent to GPT:\033[0m")
+        #print({"model": self.gpt_version, "messages": conversation})
 
         try:
-            # Correct API usage for OpenAI v1.57.0
-            # print(f"[DEBUG] {self.agent_id} using GPT model {self.gpt_version} for request.")
+            # Call the OpenAI API
             response = self.client.chat.completions.create(
                 model=self.gpt_version,
-                messages=self.conversation
+                messages=conversation
             )
-
-            # Extract the message content correctly
-            chat_response = response.choices[0].message.content
-            self.conversation.append({"role": "assistant", "content": chat_response})
-
-            return chat_response
+            return response.choices[0].message.content
 
         except Exception as e:
             return f"Error querying ChatGPT: {str(e)}"
+
+    def append_to_conversation(self, role, content):
+        """Add a new message to the conversation history."""
+        self.conversation.append({"role": role, "content": content})
+        self.truncate_conversation()
+
+    def get_conversation_history(self):
+        """Retrieve the last N exchanges from the conversation history."""
+        return self.conversation[-self.MAX_CONVERSATION_LENGTH * 2:]  # Each exchange includes user and assistant
+
+    def truncate_conversation(self):
+        """Limit the conversation history to avoid exponential growth."""
+        if len(self.conversation) > self.MAX_CONVERSATION_LENGTH * 2:
+            self.conversation = self.conversation[-self.MAX_CONVERSATION_LENGTH * 2:]
 
     async def send_message(self, to_agent, message, simulation_context):
         """Send a message to another agent by adding it to their message queue."""
@@ -169,21 +182,21 @@ class BaseAgent:
                 "priority": "medium"
             }
             await target_agent.message_queue.put(task)
-            print(f"Message sent from \033[32m{self.agent_id}\033[0m to \033[32m{to_agent}\033[0m: {message}")
+            #print(f"Message sent from \033[32m{self.agent_id}\033[0m to \033[32m{to_agent}\033[0m: {message}")
             return f"Message successfully sent to {to_agent}."
         else:
             return f"Message failed: {to_agent} not found."
 
     async def receive_message(self, message):
         """Receive and queue a message as a task."""
-        print(f"Agent {self.agent_id} received message from {message['from']}: {message['message']}")
+        #print(f"Agent {self.agent_id} received message from {message['from']}: {message['message']}")
         task = {
             "id": f"msg-{self.agent_id}-{len(self.message_queue._queue) + 1}",
             "description": f"Message from {message['from']}: {message['message']}",
             "priority": "medium"
         }
         await self.message_queue.put(task)
-        print(f"Message queued as task for {self.agent_id}: {task}")
+        #print(f"Message queued as task for {self.agent_id}: {task}")
 
     async def activity_loop(self):
         """Main activity loop for the agent."""
@@ -237,11 +250,10 @@ class BaseAgent:
                         "task_queue": self.task_queue
                     }
                 )
-                print(f"Command result: {result}")
+                #print(f"Command result: {result}")
             else:
                 print(f"\033[32m{self.agent_id}\033[0m: {line}")
-
-
+    
     def stop(self):
         """Stop the agent's activity loop."""
         self.active = False
