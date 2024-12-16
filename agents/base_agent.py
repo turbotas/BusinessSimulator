@@ -1,4 +1,4 @@
-from openai import OpenAI
+from openai import AsyncOpenAI
 import asyncio
 
 
@@ -37,7 +37,7 @@ class BaseAgent:
         self.params = params
         self.state = "Idle"
         self.conversation = []  # Threaded conversation history
-        self.client = OpenAI(api_key=api_key)  # Use the OpenAI client
+        self.client = AsyncOpenAI(api_key=api_key)  # Use the OpenAI client
         self.agent_manager = agent_manager  # Reference to the AgentManager 
         self.task_queue = task_queue  # Reference to the task queue
         self.active = True  # Controls the agent's activity loop
@@ -137,7 +137,7 @@ class BaseAgent:
         return {"task_id": task["id"], "gpt": self.gpt_version, "response": response}
 
     async def query_chatgpt(self, intro_context, task_prompt):
-        """Query ChatGPT with user input and maintain concise conversation history."""
+        """Query ChatGPT asynchronously and maintain concise conversation history."""
         # Construct the complete conversation
         conversation = [{"role": "system", "content": intro_context}]
         conversation.extend(self.get_conversation_history())
@@ -148,14 +148,17 @@ class BaseAgent:
         #print({"model": self.gpt_version, "messages": conversation})
 
         try:
-            # Call the OpenAI API
-            response = self.client.chat.completions.create(
+            # Make the asynchronous API call
+            response = await self.client.chat.completions.create(
                 model=self.gpt_version,
                 messages=conversation
             )
+
+            # Extract and return the assistant's response
             return response.choices[0].message.content
 
         except Exception as e:
+            print(f"Error querying ChatGPT for {self.agent_id}: {e}")
             return f"Error querying ChatGPT: {str(e)}"
 
     def append_to_conversation(self, role, content):
