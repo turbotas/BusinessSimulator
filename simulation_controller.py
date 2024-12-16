@@ -32,6 +32,9 @@ class SimulationController:
         self.task_queue = None
         self.performance_monitor = None
         self.communication_layer = None
+        self.roles_library = {}  # To store roles information
+        self.initial_agents = [] # To store the list of initial agents
+        self.initial_tasks = []  # To store the list of initial tasks       
 
     def load_config(self, file_path):
         """Load configuration from a JSON file."""
@@ -43,12 +46,22 @@ class SimulationController:
             return {}
 
     def load_meta_config(self):
-        """Load the meta-configuration file."""
+        """Load the meta-configuration file and separate roles, agents, and tasks."""
         try:
             with open(self.meta_config_file, "r") as f:
-                return json.load(f)
+                meta_config = json.load(f)
+                self.roles_library = {role["role"]: role for role in meta_config.get("roles", [])}
+                self.initial_agents = meta_config.get("initial_agents", [])
+                self.initial_tasks = meta_config.get("initial_tasks", [])
+                
+                # Debugging: Print loaded sections
+                print(f"Roles Library Loaded: {self.roles_library}")
+                print(f"Initial Agents Loaded: {self.initial_agents}")
+                print(f"Initial Tasks Loaded: {self.initial_tasks}")  # Add this debug line
+                
+                return meta_config
         except FileNotFoundError:
-            print(f"Meta-config file not found: {meta_config_file}")
+            print(f"Meta-config file not found: {self.meta_config_file}")
             return {}
 
     async def initialize(self):
@@ -71,11 +84,12 @@ class SimulationController:
             self.task_queue  # Pass task queue to agent manager
         )
 
-        # Load meta-config and initialize agents asynchronously
-        meta_config = self.load_meta_config()
+        # Load meta-config to populate roles library and initial agents
+        self.load_meta_config()
+
         try:
-            await self.initialize_agents(meta_config)
-            self.assign_initial_tasks(meta_config)
+            await self.initialize_agents()  # Spawn initial agents
+            self.assign_initial_tasks()  # Assign tasks
             print("Simulation environment initialized.")
             self.running = True
         except Exception as e:
@@ -83,19 +97,23 @@ class SimulationController:
         finally:
             self.initializing = False
 
-    async def initialize_agents(self, meta_config):
-        """Initialize agents based on the meta-configuration asynchronously."""
-        roles = meta_config.get("roles", [])
-        tasks = []  # Define the tasks list
-        for role in roles:
+    async def initialize_agents(self):
+        """Initialize agents based on the initial_agents list in the meta-config."""
+        tasks = []  # Define async tasks for agent creation
+        for agent in self.initial_agents:
+            role_params = self.roles_library.get(agent["role"], {})
+            if not role_params:
+                print(f"Role {agent['role']} not found in the role library. Skipping agent {agent['name']}.")
+                continue
+
             agent_params = {
-                "name": role.get("name", "Unnamed Role"),
-                "description": role.get("description", "No description provided."),
-                "prompt": role.get("prompt", ""),
-                "boss": role.get("boss"),
-                "subordinates": role.get("subordinates", []),
-                "role": role.get("role", "GenericRole"),  # Default role to 'GenericRole' if missing
-                "gpt_version": role.get("gpt_version", self.config.get("chatgpt_agent", {}).get("default_gpt_version", "gpt-4")),  # Add GPT version
+                "name": agent.get("name"),
+                "description": role_params.get("description", "No description provided."),
+                "prompt": role_params.get("prompt", ""),
+                "boss": role_params.get("boss"),
+                "subordinates": role_params.get("subordinates", []),
+                "role": agent["role"],
+                "gpt_version": role_params.get("gpt_version", self.config.get("chatgpt_agent", {}).get("default_gpt_version", "gpt-4"))
             }
             # Create an async task for each agent spawn
             tasks.append(asyncio.create_task(self.agent_manager.spawn_agent("BaseAgent", agent_params)))
@@ -103,24 +121,31 @@ class SimulationController:
         # Periodic progress reporting
         for i, task in enumerate(asyncio.as_completed(tasks), start=1):
             await task
-            #print(f"Initialized {i}/{len(tasks)} agents...")
         print(f"Initialized {i} agents...")
 
         # Await all tasks to complete
         await asyncio.gather(*tasks)
 
-    def assign_initial_tasks(self, meta_config):
-        """Assign initial tasks to agents."""
-        roles = meta_config.get("roles", [])
-        for role in roles:
-            for task_desc in role.get("initial_tasks", []):
-                task = {
+    def assign_initial_tasks(self):
+        """Assign initial tasks based on the initial_tasks section in the meta-config."""
+        if not self.initial_tasks:
+            print("No initial tasks to assign.")
+            return
+
+        for task in self.initial_tasks:
+            assigned_role = task.get("assigned_role")
+            if assigned_role in self.roles_library:
+                task_to_add = {
                     "id": len(self.task_queue.get_all_tasks()) + 1,
-                    "description": task_desc,
+                    "description": task["description"],
                     "priority": "medium",
-                    "role": role["role"],  # Add role for task assignment
+                    "role": assigned_role
                 }
-                self.task_queue.add_task(task)
+                self.task_queue.add_task(task_to_add)
+                print(f"Assigned initial task: {task_to_add}")
+            else:
+                print(f"Task skipped: Assigned role {assigned_role} not found in roles library.")
+
 
     async def start_simulation(self):
         """Start the simulation."""

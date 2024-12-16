@@ -1,77 +1,80 @@
 {
     "roles": [
         {
-            "name": "CEO",
+            "role": "CEO",
             "description": "Chief Executive Officer of the organization.",
             "prompt": "You are the CEO. Oversee the entire organization, define the vision, and make executive decisions.",
             "boss": null,
-            "subordinates": ["CTO", "CFO", "COO"],
-            "role": "CEO",
-            "initial_tasks": [
-                "Define company strategy",
-                "Set objectives for the year"
-            ]
+            "subordinates": ["CTO"],
+            "gpt_version": "gpt-4o-mini",
+            "min_number": 1,
+            "max_number": 1
         },
         {
-            "name": "CTO",
+            "role": "CTO",
             "description": "Chief Technology Officer responsible for technical strategy and innovation.",
             "prompt": "You are the CTO. Lead technology initiatives and oversee the tech team.",
             "boss": "CEO",
-            "subordinates": ["Lead Developer", "System Architect"],
-            "role": "CTO",
-            "initial_tasks": [
-                "Evaluate emerging technology trends",
-                "Draft a technical roadmap"
-            ]
+            "subordinates": ["Tech_Manager"],
+            "gpt_version": "gpt-4o-mini",
+            "min_number": 1,
+            "max_number": 1
         },
-        {
-            "name": "CFO",
-            "description": "Chief Financial Officer responsible for financial strategy and operations.",
-            "prompt": "You are the CFO. Manage financial risks, planning, and reporting.",
-            "boss": "CEO",
-            "subordinates": ["Finance Manager", "Accountant"],
-            "role": "CFO",
-            "initial_tasks": [
-                "Prepare the annual budget",
-                "Oversee financial audits"
-            ]
-        },
-        {
-            "name": "COO",
-            "description": "Chief Operating Officer responsible for operations and resource management.",
-            "prompt": "You are the COO. Ensure operational efficiency across all departments.",
-            "boss": "CEO",
-            "subordinates": ["Operations Manager", "HR Manager"],
-            "role": "COO",
-            "initial_tasks": [
-                "Optimize operational workflows",
-                "Develop a talent acquisition strategy"
-            ]
-        },
-        {
-            "name": "Lead Developer",
-            "description": "Lead Developer overseeing software development projects.",
-            "prompt": "You are the Lead Developer. Manage the development team and ensure timely delivery of features.",
+		{
+            "role": "Tech_Manager",
+            "description": "Manager of the technology team overseeing technical functions such as software development, hardware development etc",
+            "prompt": "You are the Technical Manager. Coordinate technical projects and manage the technical team.",
             "boss": "CTO",
-            "subordinates": ["Backend Developer", "Frontend Developer"],
-            "role": "Lead Developer",
-            "initial_tasks": [
-                "Finalize feature specifications for Q1",
-                "Conduct code reviews"
-            ]
+            "subordinates": ["Python_Developer"],
+            "gpt_version": "gpt-4o-mini",
+            "min_number": 0,
+            "max_number": 1
         },
         {
-            "name": "Finance Manager",
-            "description": "Finance Manager handling budgeting and financial analysis.",
-            "prompt": "You are the Finance Manager. Assist the CFO with financial operations.",
-            "boss": "CFO",
-            "subordinates": ["Accountant"],
-            "role": "Finance Manager",
-            "initial_tasks": [
-                "Analyze quarterly financial data",
-                "Assist with tax filings"
-            ]
+            "role": "Python_Developer",
+            "description": "Responsible for developing and maintaining Python-based applications.",
+            "prompt": "You are a Python Developer. Focus on coding, debugging, and delivering high-quality software.",
+            "boss": "Tech_Manager",
+            "subordinates": [],
+            "gpt_version": "gpt-4o-mini",
+            "min_number": 0,
+            "max_number": 8
+        }
+    ],
+    "initial_agents": [
+        {
+            "name": "CEO",
+            "role": "CEO"
+        },
+        {
+            "name": "CTO",
+            "role": "CTO"
+        },
+        {
+            "name": "Tech_Manager",
+            "role": "Tech_Manager"
+        },
+        {
+            "name": "Python_Developer",
+            "role": "Python_Developer"
+        }
+    ],
+	    "initial_tasks": [
+        {
+            "description": "Describe your role in 50 words, including your reporting structure.",
+            "assigned_role": "CEO"
+        },
+		{
+            "description": "Describe your role in 50 words, including your reporting structure.",
+            "assigned_role": "CTO"
+        },
+		{
+            "description": "Describe your role in 50 words, including your reporting structure.",
+            "assigned_role": "Tech_Manager"
+        },
+		{
+            "description": "Develop a function for sorting data using a custom comparator in Python.",
+            "assigned_role": "Python_Developer"
         }
     ]
 }
-

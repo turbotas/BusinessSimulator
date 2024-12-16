@@ -5,11 +5,5 @@
     "communication_layer": {},
     "chatgpt_agent": {
 		"default_gpt_version": "gpt-4o-mini"
-    },
-    "initial_agents": [
-        {"type": "DataAnalystAgent", "params": {"name": "Alice"}}
-    ],
-    "initial_tasks": [
-        {"id": 1, "description": "Analyze customer feedback", "priority": "high"}
-    ]
+    }
 }

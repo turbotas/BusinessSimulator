@@ -1,204 +1,153 @@
 {
     "roles": [
         {
-            "name": "CEO",
+            "role": "CEO",
             "description": "Chief Executive Officer of the organization.",
             "prompt": "You are the CEO. Oversee the entire organization, define the vision, and make executive decisions.",
             "boss": null,
             "subordinates": ["CTO", "CFO", "COO"],
-            "role": "CEO",
-			"gpt_version": "gpt-4o",
-            "initial_tasks": [
-                "Describe your role in 50 words, including your reporting structure."
-            ]
+            "gpt_version": "gpt-4o",
+            "min_count": 1,
+            "max_count": 1
         },
         {
-            "name": "CTO",
+            "role": "CTO",
             "description": "Chief Technology Officer responsible for technical strategy and innovation.",
             "prompt": "You are the CTO. Lead technology initiatives and oversee the tech team.",
             "boss": "CEO",
             "subordinates": ["Tech_Manager", "QA_Manager"],
-            "role": "CTO",
-            "initial_tasks": [
-                "Describe your role in 50 words, including your reporting structure."
-            ]
+            "gpt_version": "gpt-4o-mini",
+            "min_count": 1,
+            "max_count": 1
         },
         {
-            "name": "CFO",
+            "role": "CFO",
             "description": "Chief Financial Officer responsible for financial strategy and operations.",
             "prompt": "You are the CFO. Manage financial risks, planning, and reporting.",
             "boss": "CEO",
             "subordinates": ["Finance_Manager"],
-            "role": "CFO",
-            "initial_tasks": [
-                "Describe your role in 50 words, including your reporting structure."
-            ]
+            "gpt_version": "gpt-4o-mini",
+            "min_count": 1,
+            "max_count": 1
         },
         {
-            "name": "COO",
-            "description": "Chief Operating Officer responsible for operations and resource management.",
-            "prompt": "You are the COO. Ensure operational efficiency across all departments.",
+            "role": "COO",
+			"description": "Chief Operating Officer responsible for daily operations and resource management.",
+			"prompt": "You are the COO. Collaborate with the CIO to ensure technology enhances operational efficiency.",
             "boss": "CEO",
             "subordinates": ["HR_Manager", "Operations_Manager", "Project_Manager"],
-            "role": "COO",
-            "initial_tasks": [
-                "Describe your role in 50 words, including your reporting structure."
-            ]
+            "gpt_version": "gpt-4o-mini",
+            "min_count": 1,
+            "max_count": 1
         },
-        {
-            "name": "Tech_Manager",
-            "description": "Manager of the technology team overseeing software development.",
-            "prompt": "You are the Tech Manager. Coordinate software development projects and manage the developer team.",
-            "boss": "CTO",
-            "subordinates": ["Python_Developer"],
-            "role": "Tech_Manager",
-            "initial_tasks": [
-                "Describe your role in 50 words, including your reporting structure."
-            ]
-        },
-        {
-            "name": "Python_Developer",
-            "description": "Software Developer specializing in Python development.",
-            "prompt": "You are a Python Developer. Write and maintain Python code for software projects.",
-            "boss": "Tech_Manager",
-            "subordinates": [],
-            "role": "Python_Developer",
+		{
+			"role": "CIO",
+			"description": "Chief Information Officer responsible for IT strategy, infrastructure, and cybersecurity.",
+			"prompt": "You are the CIO. Collaborate with the COO to integrate technology into operations and enable business transformation.",
+			"boss": "CEO",
+			"subordinates": ["IT_Manager", "Cybersecurity_Manager", "Data_Analytics_Manager"],
 			"gpt_version": "gpt-4o-mini",
-            "initial_tasks": [
-                "Describe your role in 50 words, including your reporting structure."
-            ]
-        },
+			"min_count": 1,
+			"max_count": 1
+		},
 		{
-            "name": "Python_Developer",
+			"role": "IT_Manager",
+			"description": "Oversees the IT infrastructure, including hardware, software, and networks to ensure smooth operations.",
+			"prompt": "You are the IT Manager. Manage the organization's IT infrastructure, ensure system uptime, and support business operations.",
+			"boss": "CIO",
+			"subordinates": ["System_Administrator", "Network_Engineer", "Helpdesk_Support"],
+			"gpt_version": "gpt-4o-mini",
+			"min_count": 0,
+			"max_count": 1
+		},
+		{
+			"role": "Cybersecurity_Manager",
+			"description": "Responsible for managing the organization's cybersecurity strategy and protecting digital assets.",
+			"prompt": "You are the Cybersecurity Manager. Ensure data security, manage cybersecurity risks, and respond to incidents.",
+			"boss": "CIO",
+			"subordinates": ["Security_Analyst", "Incident_Response_Specialist"],
+			"gpt_version": "gpt-4o-mini",
+			"min_count": 0,
+			"max_count": 1
+		},
+		{
+			"role": "Data_Analytics_Manager",
+			"description": "Leads the data analytics team to provide insights and support data-driven decisions.",
+			"prompt": "You are the Data Analytics Manager. Oversee the collection, analysis, and presentation of data to support business strategy.",
+			"boss": "CIO",
+			"subordinates": ["Data_Scientist", "BI_Analyst"],
+			"gpt_version": "gpt-4o-mini",
+			"min_count": 0,
+			"max_count": 1
+		},
+        {
+            "role": "Python_Developer",
             "description": "Software Developer specializing in Python development.",
             "prompt": "You are a Python Developer. Write and maintain Python code for software projects.",
             "boss": "Tech_Manager",
             "subordinates": [],
-            "role": "Python_Developer",
-			"gpt_version": "gpt-4o-mini"
+            "gpt_version": "gpt-4o-mini",
+            "min_count": 0,
+            "max_count": 4
         },
         {
-            "name": "QA_Manager",
-            "description": "Manager overseeing quality assurance processes and ensuring software reliability.",
-            "prompt": "You are the QA Manager. Lead the QA team and ensure high-quality standards across all projects.",
-            "boss": "CTO",
-            "subordinates": ["QA_Tester"],
-            "role": "QA_Manager",
-            "initial_tasks": [
-                "Describe your role in 50 words, including your reporting structure."
-            ]
-        },
-        {
-            "name": "QA_Tester",
-            "description": "Quality Assurance Tester ensuring the reliability and quality of software.",
-            "prompt": "You are a QA Tester. Test software functionality, report bugs, and ensure quality.",
-            "boss": "QA_Manager",
-            "subordinates": [],
             "role": "QA_Tester",
-            "initial_tasks": [
-                "Describe your role in 50 words, including your reporting structure."
-            ]
-        },
-		{
-            "name": "QA_Tester",
             "description": "Quality Assurance Tester ensuring the reliability and quality of software.",
             "prompt": "You are a QA Tester. Test software functionality, report bugs, and ensure quality.",
             "boss": "QA_Manager",
             "subordinates": [],
-            "role": "QA_Tester"
+            "gpt_version": "gpt-4o-mini",
+            "min_count": 0,
+            "max_count": 4
         },
         {
-            "name": "Project_Manager",
-            "description": "Manager responsible for planning and executing software development projects.",
-            "prompt": "You are the Project Manager. Plan, monitor, and deliver software projects on time.",
-            "boss": "COO",
-            "subordinates": ["Python_Developer", "QA_Tester"],
-            "role": "Project_Manager",
-            "initial_tasks": [
-                "Describe your role in 50 words, including your reporting structure."
-            ]
-        },
-		{
-            "name": "Project_Manager",
-            "description": "Manager responsible for planning and executing software development projects.",
-            "prompt": "You are the Project Manager. Plan, monitor, and deliver software projects on time.",
-            "boss": "COO",
-            "subordinates": ["Python_Developer", "QA_Tester"],
-            "role": "Project_Manager"
-        },
-        {
-            "name": "Finance_Manager",
-            "description": "Manager overseeing financial operations and budgeting.",
-            "prompt": "You are the Finance Manager. Assist the CFO with financial operations and oversee accountants.",
-            "boss": "CFO",
-            "subordinates": ["Accountant"],
-            "role": "Finance_Manager",
-            "initial_tasks": [
-                "Describe your role in 50 words, including your reporting structure."
-            ]
-        },
-        {
-            "name": "Accountant",
-            "description": "Responsible for financial records and compliance.",
-            "prompt": "You are an Accountant. Manage financial records and ensure compliance with regulations.",
-            "boss": "Finance_Manager",
-            "subordinates": [],
-            "role": "Accountant",
-            "initial_tasks": [
-                "Describe your role in 50 words, including your reporting structure."
-            ]
-        },
-        {
-            "name": "Operations_Manager",
-            "description": "Manager ensuring smooth operations across the company.",
-            "prompt": "You are the Operations Manager. Oversee operational workflows and manage daily business operations.",
-            "boss": "COO",
-            "subordinates": ["Logistics_Coordinator"],
-            "role": "Operations_Manager",
-            "initial_tasks": [
-                "Describe your role in 50 words, including your reporting structure."
-            ]
-        },
-        {
-            "name": "Logistics_Coordinator",
-            "description": "Responsible for logistics and supply chain coordination.",
-            "prompt": "You are a Logistics Coordinator. Ensure smooth supply chain and logistics operations.",
-            "boss": "Operations_Manager",
-            "subordinates": [],
-            "role": "Logistics_Coordinator",
-            "initial_tasks": [
-                "Describe your role in 50 words, including your reporting structure."
-            ]
-        },
-        {
-            "name": "HR_Manager",
-            "description": "Manager responsible for human resources and talent acquisition.",
-            "prompt": "You are the HR Manager. Develop recruitment strategies and oversee employee relations.",
-            "boss": "COO",
-            "subordinates": ["HR_Specialist"],
-            "role": "HR_Manager",
-            "initial_tasks": [
-                "Describe your role in 50 words, including your reporting structure."
-            ]
-        },
-        {
-           "name": "HR_Specialist",
-            "description": "Responsible for recruiting and onboarding new employees (agents) and dismissing employees (agents) when no longer needed.",
-            "prompt": "You are an HR_Specialist. Manage the recruitment and onboarding process for new hires. You can do this with the spawn command to make a new agent with a specified role as per this list of commands",
-            "boss": "HR_Manager",
-            "subordinates": [],
             "role": "HR_Specialist",
-            "initial_tasks": [
+            "description": "Responsible for recruiting and onboarding new employees (agents) and dismissing employees (agents) when no longer needed.",
+            "prompt": "You are an HR_Specialist. Manage the recruitment and onboarding process for new hires.",
+            "boss": "HR_Manager",
+            "subordinates": [],
+            "gpt_version": "gpt-4o-mini",
+            "min_count": 0,
+            "max_count": 2
+        }
+    ],
+    "initial_agents": [
+        { "name": "CEO", "role": "CEO" },
+        { "name": "CTO", "role": "CTO" },
+        { "name": "CFO", "role": "CFO" },
+        { "name": "COO", "role": "COO" },
+		{ "name": "CIO", "role": "CIO" }
+    ],
+    "initial_tasks": [
+        {
+            "assigned_role": "CEO",
+            "description": [
+                "Describe your role in 50 words, including your reporting structure."
+            ]
+        },
+        {
+            "assigned_role": "CTO",
+            "description": [
+                "Describe your role in 50 words, including your reporting structure."
+            ]
+        },
+        {
+            "assigned_role": "CFO",
+            "description": [
+                "Describe your role in 50 words, including your reporting structure."
+            ]
+        },
+        {
+            "assigned_role": "COO",
+            "description": [
                 "Describe your role in 50 words, including your reporting structure."
             ]
         },
 		{
-            "name": "HR_Specialist",
-            "description": "Responsible for recruiting and onboarding new employees (agents) and dismissing employees (agents) when no longer needed.",
-            "prompt": "You are an HR_Specialist. Manage the recruitment and onboarding process for new hires. You can do this with the spawn command to make a new agent with a specified role as per this list of commands",
-            "boss": "HR_Manager",
-            "subordinates": [],
-            "role": "HR_Specialist"
-        }
+            "assigned_role": "CIO",
+            "description": [
+                "Describe your role in 50 words, including your reporting structure."
+            ]
+		}
     ]
 }
