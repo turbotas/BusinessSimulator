@@ -146,7 +146,6 @@ class SimulationController:
             else:
                 print(f"Task skipped: Assigned role {assigned_role} not found in roles library.")
 
-
     async def start_simulation(self):
         """Start the simulation."""
         if self.running:
@@ -302,6 +301,20 @@ class SimulationController:
                         print(result)
                     except ValueError:
                         print("Usage: kill_agent <agent_id>")
+                elif command.startswith("agent_info"):
+                    try:
+                        _, agent_id = command.split(maxsplit=1)
+                        if agent_id not in self.agent_manager.get_active_agents():
+                            print(f"Agent {agent_id} not found.")
+                        else:
+                            agent = self.agent_manager.agents[agent_id]
+                            info = agent.get_info()
+                            print("\n\033[33m--- Agent Information ---\033[0m")
+                            for key, value in info.items():
+                                print(f"\033[36m{key}:\033[0m {value}")
+                            print("\033[33m---------------------------\033[0m\n")
+                    except ValueError:
+                        print("Usage: agent_info <agent_id>")                
                 else:
                     print("Unknown command. Type 'help' for a list of commands.")
             except Exception as e:

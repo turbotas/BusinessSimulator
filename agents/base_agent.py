@@ -257,6 +257,22 @@ class BaseAgent:
             else:
                 print(f"\033[32m{self.agent_id}\033[0m: {line}")
     
+    def get_info(self):
+        """Return all relevant details about the agent."""
+        return {
+            "Agent ID": self.agent_id,
+            "Name": self.params.get("name", "Unknown"),
+            "Role": self.params.get("role", "Unknown"),
+            "Description": self.params.get("description", "No description provided."),
+            "State": self.state,
+            "Boss": self.boss or "None",
+            "Subordinates": ", ".join(self.subordinates) if self.subordinates else "None",
+            "GPT Version": self.gpt_version,
+            "Task Queue Size": len(self.task_queue.get_all_tasks()),
+            "Message Queue Size": self.message_queue.qsize(),
+            "Conversation History": len(self.conversation),
+        }
+    
     def stop(self):
         """Stop the agent's activity loop."""
         self.active = False
