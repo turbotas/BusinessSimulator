@@ -235,8 +235,37 @@ class SimulationController:
                     if not self.agent_manager:
                         print("Simulation not started. Use 'start' command first.")
                         continue
-                    _, agent_type, *params = command.split()
-                    await self.agent_manager.spawn_agent(agent_type, {"params": params})
+                    try:
+                        _, role = command.split(maxsplit=1)  # Extract the role to spawn
+                        role = role.strip()
+
+                        # Validate if the role exists in the roles library
+                        if role not in self.roles_library:
+                            print(f"Error: Role '{role}' is not defined in the roles library. Use a valid role.")
+                            print(f"Available roles: {', '.join(self.roles_library.keys())}")
+                            continue
+
+                        # Role is valid, fetch role parameters
+                        role_params = self.roles_library[role]
+
+                        # Generate a unique agent name for this role
+                        #agent_name = f"{role}_{len(self.agent_manager.get_active_agents()) + 1}"
+                        agent_name = f"{role}"
+
+                        # Spawn the agent with the validated parameters
+                        agent_params = {
+                            "name": agent_name,
+                            "description": role_params.get("description", "No description provided."),
+                            "prompt": role_params.get("prompt", ""),
+                            "boss": role_params.get("boss"),
+                            "subordinates": role_params.get("subordinates", []),
+                            "role": role,
+                            "gpt_version": role_params.get("gpt_version", self.config.get("default_gpt_version", "gpt-4o")),
+                        }
+                        agent_id = await self.agent_manager.spawn_agent(role, agent_params)
+                        print(f"Successfully spawned agent '{agent_id}' with role '{role}'.")
+                    except ValueError:
+                        print("Usage: spawn <role>")
                 elif command == "list_agents":
                     print(self.agent_manager.get_active_agents())
                 elif command.startswith("add_task"):
