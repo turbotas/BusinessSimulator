@@ -5,13 +5,25 @@ import asyncio
 class BaseAgent:
     MAX_CONVERSATION_LENGTH = 10  # Limit to the last 10 exchanges
     COMMAND_DEFINITIONS = {
-        "message": {
+        "message_agent": {
             "description": "Send a message to another agent.",
             "syntax": "message <target_agent_id> <message>"
         },
+        "message_role": {
+            "description": "Send a message to all agents with given role.",
+            "syntax": "message <target_agent_id> <role>"
+        },
         "list_agents": {
+            "description": "List all active agents (format: agent_id:role)",
+            "syntax": "list_agents"
+        },
+        "list_roles": {
             "description": "List all active agents.",
             "syntax": "list_agents"
+        },
+        "spawn": {
+            "description": "Create a new agent with the given role.",
+            "syntax": "spawn <role>"
         },
         "status": {
             "description": "Report the current status of the current agent. Normally this is for admin purposes only.",
@@ -22,11 +34,11 @@ class BaseAgent:
             "syntax": "broadcast <message>"
         },
         "flush_tasks": {
-            "description": "Flush the entire task queue accross the organisation. Only carry this out if yopu want the whole organisation to stop.",
+            "description": "Flush the entire task queue accross the organisation. Only carry this out if you want the whole organisation to stop.",
             "syntax": "flush_tasks"
         },
         "terminate_agent": {
-            "description": "Terminate and remove a specific agent. Normally this is a HR activity or one of the main officers of the orgnanisation.",
+            "description": "Terminate and remove a specific agent. Normally this would be one of your direct reports.",
             "syntax": "terminate_agent <agent_id>"
         }
     }
@@ -53,12 +65,18 @@ class BaseAgent:
         try:
             #print(f"DEBUG: Received command: {command}")  # Debug received command
             #print(f"DEBUG: Simulation context: {simulation_context}")  # Debug simulation context
-            if command.startswith("message"):
+            if command.startswith("message_agent"):
                 # Extract target and message
                 _, target_agent, *message_parts = command.split(maxsplit=2)
                 message = " ".join(message_parts)
                 # Use send_message to queue the message
-                return await self.send_message(target_agent, message, simulation_context)
+                return await self.send_message_agent(target_agent, message, simulation_context)
+            elif command.startswith("message_role"):
+                # Extract target and message
+                _, target_role, *message_parts = command.split(maxsplit=2)
+                message = " ".join(message_parts)
+                # Use send_message to queue the message
+                return await self.send_message_role(target_role, message, simulation_context)
             elif command.startswith("list_agents"):
                 return f"Active agents: {simulation_context['agent_manager'].get_active_agents()}"
             elif command.startswith("status"):
@@ -92,69 +110,94 @@ class BaseAgent:
         """Perform a task using ChatGPT."""
         self.state = "Active"
 
-        # Generate the command help text
+        # Generate the command help text dynamically
         commands_help = "\n".join(
             [f"{cmd}: {info['description']} (Syntax: {info['syntax']})"
              for cmd, info in self.COMMAND_DEFINITIONS.items()]
         )
+        
+        # Dynamically fetch the current list of agents with roles
+        current_agent_list = ", ".join(
+            f"{agent_id} ({agent.params.get('role', 'Unknown Role')})"
+            for agent_id, agent in self.agent_manager.agents.items()
+        )
 
-        # Fetch the full list of staff (agents) directly from the AgentManager
-        staff_list = ", ".join(self.agent_manager.get_active_agents())
-
-        # Construct the fixed introduction
-        intro_context = (
-            f"You are agent {self.params.get('name')}, "
+        # Static system prompt with dynamic agent list
+        system_prompt = (
+            f"You are agent {self.agent_id}, "
             f"the {self.params.get('description', 'role description not provided')}.\n"
             f"{self.params.get('prompt', 'act within your capacity')}.\n\n"
-            f"Commands you can execute are:\n{commands_help}. Commands must start on a blank line.  If you have no command, nothing will be done.\n\n"
+            f"Commands you can execute are:\n{commands_help}.\n"
+            "Commands must start on a blank line. If you have no command, nothing will be done.\n\n"
             f"Your direct supervisor is: {self.params.get('boss', 'None')}.\n"
-            f"Your direct reports are: {', '.join(self.subordinates)}.\n\n"
-            f"The full list of agents in this organization is: {staff_list}.\n\n"
+            f"Your direct reports are: {', '.join(self.subordinates) or 'None'}.\n\n"
+            f"The current list of agents in this organization is: {current_agent_list}."
         )
 
-        # Create task-specific prompt
+        # Task-specific user prompt
         task_prompt = (
             f"Task: {task['description']}\n"
-            "Respond in the context of your role. Be precise and succinct. Only communicate if necessary to achieve your task.  Do not simply send thankyou messages. Use at least one command in your response unless no action is required, in which case, you should not issue a command.  You may issue multiple commands in one response, as long as each starts on it's own line. Be careful not to issue commands to yourself unless that is required. Do not respond until you have an answer or require more information."
+            "Respond in the context of your role. Be precise and succinct. Only communicate if necessary "
+            "to achieve your task. Use at least one command unless no action is required. "
+            "Multiple commands must each start on their own line. Previous chat history is proviuded with you as 'Assistant'. DO NOT simply send innanities back and forth."
         )
 
-        # Debug: Print the constructed prompt
-        #print(f"DEBUG: Prompt for {self.agent_id}:\n{intro_context + task_prompt}")
+        # Query the AI with the clean conversation history
+        response = await self.query_chatgpt(system_prompt, task_prompt)
 
-        # Query the AI and process the result
-        response = await self.query_chatgpt(intro_context, task_prompt)
-
-        # Append the AI response to conversation history
+        # Append the user prompt and AI response to conversation history
+        self.append_to_conversation("user", task_prompt)
         self.append_to_conversation("assistant", response)
 
-        # Process the response as potential commands
+        # Debug: Print the response for clarity
+        print(f"\033[32mDEBUG: AI Response for {self.agent_id}:\033[0m\n{response}\n")
+
+        # Process the response for any commands
         await self.process_ai_response(response)
 
-        # Notify the task queue
+        # Notify the task queue that the task is completed
         self.task_queue.mark_task_completed(task, self.agent_id)
 
         self.state = "Idle"
         return {"task_id": task["id"], "gpt": self.gpt_version, "response": response}
 
-    async def query_chatgpt(self, intro_context, task_prompt):
-        """Query ChatGPT asynchronously and maintain concise conversation history."""
-        # Construct the complete conversation
-        conversation = [{"role": "system", "content": intro_context}]
-        conversation.extend(self.get_conversation_history())
-        conversation.append({"role": "user", "content": task_prompt})
+    async def query_chatgpt(self, system_prompt, task_prompt):
+        """Query ChatGPT asynchronously and maintain clean conversation history."""
+        # Construct the conversation with the system prompt and clean history
+        conversation = [{"role": "system", "content": system_prompt}]
+        conversation.extend(self.get_conversation_history())  # Append existing clean history
+        conversation.append({"role": "user", "content": task_prompt})  # Append current task prompt
 
-        # Debug: Print the full conversation and confirm what is sent to the AI
-        #print(f"\033[34mDEBUG: Complete conversation for {self.agent_id} being sent to GPT:\033[0m")
-        #print({"model": self.gpt_version, "messages": conversation})
+        # Debug: Print the full conversation
+        print("\033[34mDEBUG: Full Conversation Sent to GPT:\033[0m")
+        for idx, msg in enumerate(conversation):
+            print(f"  [{idx}] {msg['role'].capitalize()}: {msg['content']}")
+        print("")
 
         try:
-            # Make the asynchronous API call
+            # Make the asynchronous GPT API call
             response = await self.client.chat.completions.create(
                 model=self.gpt_version,
                 messages=conversation
             )
+            return response.choices[0].message.content
 
-            # Extract and return the assistant's response
+        except Exception as e:
+            print(f"Error querying ChatGPT for {self.agent_id}: {e}")
+            return f"Error querying ChatGPT: {str(e)}"
+
+    async def query_chatgpt_with_taskaa(self, task_prompt):
+        """Query ChatGPT with a one-time task-specific prompt."""
+        # Build the conversation without modifying self.conversation
+        conversation = [{"role": msg["role"], "content": msg["content"]} for msg in self.conversation]
+        conversation.append({"role": "user", "content": task_prompt})
+
+        try:
+            # Query the AI
+            response = await self.client.chat.completions.create(
+                model=self.gpt_version,
+                messages=conversation
+            )
             return response.choices[0].message.content
 
         except Exception as e:
@@ -175,7 +218,7 @@ class BaseAgent:
         if len(self.conversation) > self.MAX_CONVERSATION_LENGTH * 2:
             self.conversation = self.conversation[-self.MAX_CONVERSATION_LENGTH * 2:]
 
-    async def send_message(self, to_agent, message, simulation_context):
+    async def send_message_agent(self, to_agent, message, simulation_context):
         """Send a message to another agent by adding it to their message queue."""
         target_agent = simulation_context["agent_manager"].agents.get(to_agent)
         if target_agent:
@@ -189,6 +232,28 @@ class BaseAgent:
             return f"Message successfully sent to {to_agent}."
         else:
             return f"Message failed: {to_agent} not found."
+
+    async def send_message_role(self, role_name, message, simulation_context):
+        """Send a message to all agents with the specified role."""
+        agent_manager = simulation_context["agent_manager"]
+        matching_agents = [
+            agent for agent_id, agent in agent_manager.agents.items()
+            if agent.params.get("role") == role_name
+        ]
+
+        if not matching_agents:
+            return f"No agents found with role '{role_name}'."
+
+        # Send the message to each matching agent
+        for target_agent in matching_agents:
+            task = {
+                "id": f"msg-{self.agent_id}-{len(target_agent.message_queue._queue) + 1}",
+                "description": f"Message from {self.agent_id}: {message}",
+                "priority": "medium"
+            }
+            await target_agent.message_queue.put(task)
+
+        return f"Message successfully sent to {len(matching_agents)} agents with role '{role_name}'."
 
     async def receive_message(self, message):
         """Receive and queue a message as a task."""

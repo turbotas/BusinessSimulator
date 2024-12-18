@@ -5,7 +5,7 @@
             "description": "Chief Executive Officer of the organization.",
             "prompt": "You are the CEO. Oversee the entire organization, define the vision, and make executive decisions.",
             "boss": null,
-            "subordinates": ["CTO", "CFO", "COO"],
+            "subordinates": ["CTO", "CFO", "COO", "CIO"],
             "gpt_version": "gpt-4o",
             "min_count": 1,
             "max_count": 1
@@ -146,7 +146,9 @@
 		{
             "assigned_role": "CIO",
             "description": [
-                "Describe your role in 50 words, including your reporting structure."
+                "Describe your role in 50 words.",
+				"Describe your bosses role in 50 words.",
+				"Describe your subordinates roles in 50 words."
             ]
 		}
     ]
