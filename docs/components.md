@@ -47,4 +47,4 @@ This document provides a brief overview of each major component in the simulatio
 
 # Architecture Diagram
 
-![Architecture Diagram](images/architecture_diagram.png)
+![Architecture Diagram](architecture_diagram.png)
