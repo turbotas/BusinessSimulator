@@ -1,0 +1,8 @@
+flowchart LR
+    A[SimulationController] -->|creates| B(AgentManager)
+    B -->|manages| C(BaseAgent)
+    B -->|queues tasks| D(TaskQueue)
+    B -->|logs to| F(PerformanceMonitor)
+    C -->|uses| E(CommandProcessor)
+    C -->|messages| G(CommunicationLayer)
+    E -->|refers to| H(Roles Library)

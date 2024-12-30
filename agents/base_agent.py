@@ -1,25 +1,26 @@
 from openai import AsyncOpenAI
-import asyncio
+from components.command_processor import CommandProcessor
 
+import asyncio
 
 class BaseAgent:
     MAX_CONVERSATION_LENGTH = 10  # Limit to the last 10 exchanges
     COMMAND_DEFINITIONS = {
         "message_agent": {
             "description": "Send a message to another agent.",
-            "syntax": "message <target_agent_id> <message>"
+            "syntax": "message_agent <target_agent_id> <message>"
         },
         "message_role": {
             "description": "Send a message to all agents with given role.",
-            "syntax": "message <target_agent_id> <role>"
+            "syntax": "message_role <role_id> <message>"
         },
         "list_agents": {
-            "description": "List all active agents (format: agent_id:role)",
+            "description": "List all active agents (response format: agent_id:role)",
             "syntax": "list_agents"
         },
         "list_roles": {
-            "description": "List all active agents.",
-            "syntax": "list_agents"
+            "description": "List all possible roles.",
+            "syntax": "list_roles"
         },
         "spawn": {
             "description": "Create a new agent with the given role.",
@@ -34,7 +35,7 @@ class BaseAgent:
             "syntax": "broadcast <message>"
         },
         "flush_tasks": {
-            "description": "Flush the entire task queue accross the organisation. Only carry this out if you want the whole organisation to stop.",
+            "description": "Flush the entire task queue accross the organisation. Only carry this out if you want the whole organisation to stop working.",
             "syntax": "flush_tasks"
         },
         "terminate_agent": {
@@ -43,7 +44,7 @@ class BaseAgent:
         }
     }
     
-    def __init__(self, agent_id, params, api_key, agent_manager, task_queue, gpt_version, communication_layer):
+    def __init__(self, agent_id, params, api_key, agent_manager, task_queue, gpt_version, communication_layer, roles_library, command_processor):
         """Initialize a base agent with ChatGPT compatible capabilities."""
         self.agent_id = agent_id
         self.params = params
@@ -55,6 +56,8 @@ class BaseAgent:
         self.active = True  # Controls the agent's activity loop
         self.gpt_version = gpt_version  # GPT version to use
         self.message_queue = asyncio.Queue()  # Queue for incoming messages
+        self.roles_library = roles_library  # Store the roles library
+        self.command_processor = command_processor  # Pass the command processor directly
         # Extract boss and subordinates for easy access
         self.boss = params.get("boss", "No direct supervisor")
         self.subordinates = params.get("subordinates", [])
@@ -100,6 +103,11 @@ class BaseAgent:
                 _, target_agent = command.split(maxsplit=1)
                 result = simulation_context["agent_manager"].terminate_agent(target_agent)
                 return result
+            elif command == "list_roles":
+                # Use the command processor to handle the 'list_roles' request
+                result = self.command_processor.process_command("list_roles", {"caller": self.agent_id})
+                
+                return result
             else:
                 return f"Unknown command: {command}"
 
@@ -129,8 +137,8 @@ class BaseAgent:
             f"{self.params.get('prompt', 'act within your capacity')}.\n\n"
             f"Commands you can execute are:\n{commands_help}.\n"
             "Commands must start on a blank line. If you have no command, nothing will be done.\n\n"
-            f"Your direct supervisor is: {self.params.get('boss', 'None')}.\n"
-            f"Your direct reports are: {', '.join(self.subordinates) or 'None'}.\n\n"
+            f"Your direct supervisor by role is: {self.params.get('boss', 'None')}.\n"
+            f"Your direct reports by role_id are: {', '.join(self.subordinates) or 'None'}.\n\n"
             f"The current list of agents in this organization is: {current_agent_list}."
         )
 
@@ -139,7 +147,7 @@ class BaseAgent:
             f"Task: {task['description']}\n"
             "Respond in the context of your role. Be precise and succinct. Only communicate if necessary "
             "to achieve your task. Use at least one command unless no action is required. "
-            "Multiple commands must each start on their own line. Previous chat history is proviuded with you as 'Assistant'. DO NOT simply send innanities back and forth."
+            "Multiple commands must each start on their own line. Previous chat history is provided with you as 'Assistant'. DO NOT simply send innanities back and forth."
         )
 
         # Query the AI with the clean conversation history
@@ -176,24 +184,6 @@ class BaseAgent:
 
         try:
             # Make the asynchronous GPT API call
-            response = await self.client.chat.completions.create(
-                model=self.gpt_version,
-                messages=conversation
-            )
-            return response.choices[0].message.content
-
-        except Exception as e:
-            print(f"Error querying ChatGPT for {self.agent_id}: {e}")
-            return f"Error querying ChatGPT: {str(e)}"
-
-    async def query_chatgpt_with_taskaa(self, task_prompt):
-        """Query ChatGPT with a one-time task-specific prompt."""
-        # Build the conversation without modifying self.conversation
-        conversation = [{"role": msg["role"], "content": msg["content"]} for msg in self.conversation]
-        conversation.append({"role": "user", "content": task_prompt})
-
-        try:
-            # Query the AI
             response = await self.client.chat.completions.create(
                 model=self.gpt_version,
                 messages=conversation
@@ -315,7 +305,8 @@ class BaseAgent:
                     f"{command} {arguments}",
                     {
                         "agent_manager": self.agent_manager,
-                        "task_queue": self.task_queue
+                        "task_queue": self.task_queue,
+                        "roles_library": self.agent_manager.roles_library  # Ensure roles_library is passed
                     }
                 )
                 #print(f"Command result: {result}")

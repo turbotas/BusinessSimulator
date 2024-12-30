@@ -7,6 +7,7 @@ from components.agent_manager import AgentManager
 from components.task_queue import TaskQueue
 from components.performance_monitor import PerformanceMonitor
 from components.communication_layer import CommunicationLayer
+from components.command_processor import CommandProcessor
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -34,7 +35,8 @@ class SimulationController:
         self.communication_layer = None
         self.roles_library = {}  # To store roles information
         self.initial_agents = [] # To store the list of initial agents
-        self.initial_tasks = []  # To store the list of initial tasks       
+        self.initial_tasks = []  # To store the list of initial tasks
+        self.command_processor = CommandProcessor(self.roles_library)  # Add this line     
 
     def load_config(self, file_path):
         """Load configuration from a JSON file."""
@@ -76,13 +78,18 @@ class SimulationController:
         api_key = os.getenv("OPENAI_API_KEY")
         self.task_queue = TaskQueue(self.config.get("task_queue", {}))  # Initialize task queue
         self.communication_layer = CommunicationLayer()  # Initialize communication layer
+
+        # Pass the command_processor to the AgentManager
         self.agent_manager = AgentManager(
             self.config.get("agent_manager", {}),
             self.performance_monitor,
             api_key,
             self.communication_layer,
-            self.task_queue  # Pass task queue to agent manager
+            self.task_queue,
+            self.roles_library,
+            self.command_processor  # Ensure this is passed here
         )
+        
 
         # Load meta-config to populate roles library and initial agents
         self.load_meta_config()
@@ -99,12 +106,19 @@ class SimulationController:
 
     async def initialize_agents(self):
         """Initialize agents based on the initial_agents list in the meta-config."""
+        print("DEBUG: Starting agent initialization.")  # Debug statement
+        print(f"DEBUG: Initial agents: {self.initial_agents}")  # Debug initial agents
+        print(f"DEBUG: Roles Library: {self.roles_library}")  # Debug roles library
+        print(f"DEBUG: Command Processor: {self.command_processor}")  # Debug command processor
+        
         tasks = []  # Define async tasks for agent creation
         for agent in self.initial_agents:
             role_params = self.roles_library.get(agent["role"], {})
             if not role_params:
                 print(f"Role {agent['role']} not found in the role library. Skipping agent {agent['name']}.")
                 continue
+
+            print(f"DEBUG: Preparing to spawn agent {agent['name']} with role {agent['role']}.")
 
             agent_params = {
                 "name": agent.get("name"),
@@ -115,13 +129,21 @@ class SimulationController:
                 "role": agent["role"],
                 "gpt_version": role_params.get("gpt_version", self.config.get("chatgpt_agent", {}).get("default_gpt_version", "gpt-4"))
             }
-            # Create an async task for each agent spawn
-            tasks.append(asyncio.create_task(self.agent_manager.spawn_agent("BaseAgent", agent_params)))
+
+            # Debug agent parameters
+            #print(f"DEBUG: Agent parameters: {agent_params}")
+            #print(f"DEBUG: self.command_processor: {self.command_processor}")  # Check the value of command_processor
+
+
+            # Pass the CommandProcessor instance when spawning the agent
+            tasks.append(asyncio.create_task(
+                self.agent_manager.spawn_agent("BaseAgent", agent_params, self.command_processor)
+            ))
 
         # Periodic progress reporting
         for i, task in enumerate(asyncio.as_completed(tasks), start=1):
             await task
-        print(f"Initialized {i} agents...")
+        print(f"DEBUG: Initialized {i} agents...")
 
         # Await all tasks to complete
         await asyncio.gather(*tasks)
@@ -294,7 +316,7 @@ class SimulationController:
                 command = await aioconsole.ainput(">> ")  # Asynchronous input
                 if command == "exit":
                     print("Exiting simulation.")
-                    break
+                    break                               
                 elif command == "help":
                     self.print_help()
                 elif command == "start":
@@ -336,7 +358,7 @@ class SimulationController:
                             "role": role,
                             "gpt_version": role_params.get("gpt_version", self.config.get("default_gpt_version", "gpt-4o")),
                         }
-                        agent_id = await self.agent_manager.spawn_agent(role, agent_params)
+                        agent_id = await self.agent_manager.spawn_agent(role, agent_params, self.command_processor)
                         print(f"Successfully spawned agent '{agent_id}' with role '{role}'.")
                     except ValueError:
                         print("Usage: spawn <role>")
@@ -482,13 +504,8 @@ class SimulationController:
                     print(f"  \033[32mMinimum Count:\033[0m {role_info.get('min_count', 0)}")
                     print(f"  \033[32mMaximum Count:\033[0m {role_info.get('max_count', 'Unlimited')}\n")
                 elif command == "list_roles":
-                    if not self.roles_library:
-                        print("No roles available in the roles library.")
-                        continue
-                    print("\n\033[36mAvailable Roles:\033[0m")
-                    for role_name, role_info in self.roles_library.items():
-                        print(f"  \033[32m{role_name}:\033[0m {role_info.get('description', 'No description available.')}")
-                    print("")                       
+                    result = self.command_processor.process_command("list_roles", {"roles_library": self.roles_library})
+                    print(result)                
                 elif command.startswith("debug_agent"):
                     if not self.agent_manager:
                         print("Simulation not started. Use 'start' command first.")
@@ -530,6 +547,7 @@ Available Commands:
     agent_info <agent>       - Display information about the given agent
     role_info <role>         - Display information for the given role
     list_roles               - List the configured role and the role description
+    debug_agent <agent>      - Printed extended debug info for agent <agent>
     exit                     - Exit the simulation
 """)
 

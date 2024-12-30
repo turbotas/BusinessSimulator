@@ -21,6 +21,5 @@ class CommunicationLayer:
         """Receive a message for an agent."""
         queue = self.get_message_queue(agent_id)
         message = await queue.get()
-        #print(f"Message received by {agent_id}: {message}")
         return message
 
