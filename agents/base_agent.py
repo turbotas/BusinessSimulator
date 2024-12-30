@@ -103,11 +103,17 @@ class BaseAgent:
                 _, target_agent = command.split(maxsplit=1)
                 result = simulation_context["agent_manager"].terminate_agent(target_agent)
                 return result
-            elif command == "list_roles":
-                # Use the command processor to handle the 'list_roles' request
-                result = self.command_processor.process_command("list_roles", {"caller": self.agent_id})
+            elif command.startswith("list_roles"):
+                print(f"DEBUG: {self.agent_id} is invoking command_processor for 'list_roles'.")
                 
-                return result
+                # Use the command processor to handle the 'list_roles' request
+                result = self.command_processor.process_command("list_roles", {
+                    "caller": self.agent_id,
+                    "agent_manager": simulation_context["agent_manager"],
+                    "roles_library": simulation_context["roles_library"]
+                })
+                print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
+                return result  
             else:
                 return f"Unknown command: {command}"
 
@@ -137,9 +143,10 @@ class BaseAgent:
             f"{self.params.get('prompt', 'act within your capacity')}.\n\n"
             f"Commands you can execute are:\n{commands_help}.\n"
             "Commands must start on a blank line. If you have no command, nothing will be done.\n\n"
-            f"Your direct supervisor by role is: {self.params.get('boss', 'None')}.\n"
+            f"Your direct supervisor by role_id is: {self.params.get('boss', 'None')}.\n"
             f"Your direct reports by role_id are: {', '.join(self.subordinates) or 'None'}.\n\n"
             f"The current list of agents in this organization is: {current_agent_list}."
+
         )
 
         # Task-specific user prompt

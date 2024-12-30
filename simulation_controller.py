@@ -7,6 +7,7 @@ from components.agent_manager import AgentManager
 from components.task_queue import TaskQueue
 from components.performance_monitor import PerformanceMonitor
 from components.communication_layer import CommunicationLayer
+from components.global_context import GlobalContext
 from components.command_processor import CommandProcessor
 from dotenv import load_dotenv
 load_dotenv()
@@ -25,18 +26,35 @@ class SimulationController:
     def __init__(self, config_file="config/default_config.json", meta_config_file="config/meta_config.json"):
         """Initialize the simulation controller."""
         self.running = False
-        self.initializing = False  # Tracks if initialization is ongoing
+        self.initializing = False
         self.config_file = config_file
         self.meta_config_file = meta_config_file
+        
         self.config = self.load_config(config_file)
+        
+        # 1) Call load_meta_config early to populate roles_library, initial_agents, etc.
+        self.roles_library = {}
+        self.initial_agents = []
+        self.initial_tasks = []
+        self.load_meta_config()  # Now self.roles_library is filled if the meta config is present
+        
+        # 2) Create placeholders for other items
         self.agent_manager = None
         self.task_queue = None
         self.performance_monitor = None
         self.communication_layer = None
-        self.roles_library = {}  # To store roles information
-        self.initial_agents = [] # To store the list of initial agents
-        self.initial_tasks = []  # To store the list of initial tasks
-        self.command_processor = CommandProcessor(self.roles_library)  # Add this line     
+        
+        # 3) Build the global context using the newly populated roles_library
+        self.global_context = GlobalContext(
+            roles_library=self.roles_library,
+            agent_manager=self.agent_manager,
+            task_queue=self.task_queue,
+            performance_monitor=self.performance_monitor,
+            communication_layer=self.communication_layer
+        )
+        
+        # 4) Create the command processor with the global context
+        self.command_processor = CommandProcessor(self.global_context)    
 
     def load_config(self, file_path):
         """Load configuration from a JSON file."""
@@ -56,30 +74,27 @@ class SimulationController:
                 self.initial_agents = meta_config.get("initial_agents", [])
                 self.initial_tasks = meta_config.get("initial_tasks", [])
                 
-                # Debugging: Print loaded sections
                 print(f"Roles Library Loaded: {self.roles_library}")
                 print(f"Initial Agents Loaded: {self.initial_agents}")
-                print(f"Initial Tasks Loaded: {self.initial_tasks}")  # Add this debug line
-                
+                print(f"Initial Tasks Loaded: {self.initial_tasks}")
                 return meta_config
         except FileNotFoundError:
             print(f"Meta-config file not found: {self.meta_config_file}")
             return {}
 
     async def initialize(self):
-        """Set up the simulation environment asynchronously."""
         if self.initializing:
             print("Initialization is already in progress.")
             return
 
         self.initializing = True
         print("Initializing simulation environment...")
+
         self.performance_monitor = PerformanceMonitor(self.config.get("performance_monitor", {}))
         api_key = os.getenv("OPENAI_API_KEY")
-        self.task_queue = TaskQueue(self.config.get("task_queue", {}))  # Initialize task queue
-        self.communication_layer = CommunicationLayer()  # Initialize communication layer
+        self.task_queue = TaskQueue(self.config.get("task_queue", {}))
+        self.communication_layer = CommunicationLayer()
 
-        # Pass the command_processor to the AgentManager
         self.agent_manager = AgentManager(
             self.config.get("agent_manager", {}),
             self.performance_monitor,
@@ -87,16 +102,18 @@ class SimulationController:
             self.communication_layer,
             self.task_queue,
             self.roles_library,
-            self.command_processor  # Ensure this is passed here
+            self.command_processor
         )
-        
 
-        # Load meta-config to populate roles library and initial agents
-        self.load_meta_config()
+        # Update the global context references now that we've created them
+        self.global_context.agent_manager = self.agent_manager
+        self.global_context.task_queue = self.task_queue
+        self.global_context.performance_monitor = self.performance_monitor
+        self.global_context.communication_layer = self.communication_layer
 
         try:
             await self.initialize_agents()  # Spawn initial agents
-            self.assign_initial_tasks()  # Assign tasks
+            self.assign_initial_tasks()
             print("Simulation environment initialized.")
             self.running = True
         except Exception as e:
