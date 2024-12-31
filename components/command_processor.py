@@ -365,7 +365,8 @@ class CommandProcessor:
                 """
                 Command: broadcast <message>
                 Example: broadcast Hello everyone!
-                Sends a message to all agents (except the caller, if the caller is an agent).
+                Sends a message to all agents (except the caller, if the caller is an agent),
+                and notes who the message is from.
                 """
                 tokens = command.split(maxsplit=1)
                 if len(tokens) < 2:
@@ -378,8 +379,14 @@ class CommandProcessor:
                 if not agent_manager:
                     return "Error: AgentManager is not available; cannot broadcast."
 
-                # 2) Determine the caller (if any)
+                # 2) Determine the caller (if any) so we can note who it's from
                 caller_id = simulation_context.get("caller") if simulation_context else None
+
+                # If we have a caller, mention them; otherwise, say "System"
+                if caller_id:
+                    final_msg = f"[Broadcast from {caller_id}]: {broadcast_msg}"
+                else:
+                    final_msg = f"[Broadcast from System]: {broadcast_msg}"
 
                 # 3) Get the list of active agents
                 active_agents = agent_manager.get_active_agents()
@@ -393,14 +400,98 @@ class CommandProcessor:
                         # skip sending to self if the caller is an agent
                         continue
 
-                    # We'll reuse your message-sending logic. If you have a helper like `await self.send_message_agent`
-                    # or some other method, you can call that. Otherwise, replicate the code in your base_agent's send_message_agent.
-                    result = await self._send_message_to_agent(agent_id, broadcast_msg)
+                    # We'll use a helper method below
+                    result = await self._send_message_to_agent(agent_id, final_msg)
                     results.append(result)
 
+                # 5) Join the results and return them
                 final_output = "Broadcast complete. Results:\n" + "\n".join(results)
                 return final_output
+            elif command.startswith("internet_search"):
+                """
+                Command: internet_search <query>
+                Example: internet_search python tutorials
+                Performs a Google (or placeholder) search with the given query string
+                and returns HTML-formatted results as a new task in the caller's queue.
+                """
+                tokens = command.split(maxsplit=1)
+                if len(tokens) < 2:
+                    return "Usage: internet_search <query>"
 
+                search_query = tokens[1].strip()
+
+                # 1) Access the global context for agent_manager
+                agent_manager = self.global_context.agent_manager
+                if not agent_manager:
+                    return "Error: AgentManager is not available; cannot queue results."
+
+                # 2) Identify the caller (which agent or if it's the system)
+                caller_id = simulation_context.get("caller") if simulation_context else None
+                if not caller_id:
+                    # If no caller is set, we have nowhere to queue results
+                    # Could handle differently if you want the CLI to see the results, but let's assume an agent
+                    return "Error: No agent caller specified. Agents only."
+
+                # 3) Check that the caller agent exists
+                if caller_id not in agent_manager.agents:
+                    return f"Caller agent '{caller_id}' not found."
+
+                # 4) Perform the actual search (placeholder or real)
+                html_results = await self._perform_google_search(search_query)
+
+                # 5) Create a new “message” or “task” for the caller with the HTML results
+                target_agent = agent_manager.agents[caller_id]
+                new_task = {
+                    "id": f"internet_search-{len(target_agent.message_queue._queue)+1}",
+                    "description": (f"HTML Search Results for query '{search_query}'\n"
+                                    f"{html_results}"),
+                    "priority": "medium",
+                }
+                target_agent.message_queue.put_nowait(new_task)
+
+                return f"Search completed. HTML results queued for agent '{caller_id}' under ID '{new_task['id']}'."
+            elif command.startswith("internet_fetch"):
+                """
+                Command: internet_fetch <url>
+                Example: internet_fetch https://example.com/page.html
+                Fetches the contents of the given URL and places the results into the calling agent's queue.
+                """
+                tokens = command.split(maxsplit=1)
+                if len(tokens) < 2:
+                    return "Usage: internet_fetch <url>"
+
+                url = tokens[1].strip()
+
+                # 1) Access the agent manager from the global context
+                agent_manager = self.global_context.agent_manager
+                if not agent_manager:
+                    return "Error: AgentManager is not available; cannot fetch data."
+
+                # 2) Determine the caller (agent) so we know where to store results
+                caller_id = simulation_context.get("caller") if simulation_context else None
+                if not caller_id:
+                    return "Error: No agent caller specified. Agents only."
+
+                if caller_id not in agent_manager.agents:
+                    return f"Caller agent '{caller_id}' not found."
+
+                # 3) Actually fetch the URL (async)
+                try:
+                    fetched_html = await self._perform_internet_fetch(url)
+                except Exception as e:
+                    return f"Error fetching URL '{url}': {str(e)}"
+
+                # 4) Put the fetched data into the caller agent's queue
+                target_agent = agent_manager.agents[caller_id]
+                new_task = {
+                    "id": f"internet_fetch-{len(target_agent.message_queue._queue) + 1}",
+                    "description": f"Fetched content from '{url}':\n{fetched_html}",
+                    "priority": "medium",
+                }
+                target_agent.message_queue.put_nowait(new_task)
+
+                return (f"Fetch completed for URL '{url}'. Data queued for agent '{caller_id}' "
+                        f"as task ID '{new_task['id']}'.")
 
             else:
                 return f"\033[31mUnknown command: {command}\033[0m"
@@ -410,7 +501,7 @@ class CommandProcessor:
 
     async def _send_message_to_agent(self, to_agent_id: str, message: str) -> str:
         """
-        A small helper to queue a message task to the given agent.
+        A small helper to queue a message task to the given agent, asynchronously.
         """
         agent_manager = self.global_context.agent_manager
         if not agent_manager or to_agent_id not in agent_manager.agents:
@@ -419,8 +510,57 @@ class CommandProcessor:
         target_agent = agent_manager.agents[to_agent_id]
         task = {
             "id": f"msg-broadcast-{len(target_agent.message_queue._queue) + 1}",
-            "description": f"[Broadcast]: {message}",
+            "description": message,        # e.g., "[Broadcast from CFO_1]: Hello all!"
             "priority": "medium"
         }
+        # Even though put_nowait is non-blocking, we keep this method async for consistency
         target_agent.message_queue.put_nowait(task)
         return f"Message successfully sent to {to_agent_id}."
+
+    async def _perform_google_search(self, query: str) -> str:
+        """
+        Placeholder for an async Google search returning HTML results.
+        Replace this with real logic if you have an actual search API or library.
+        """
+        # If you have a real API, do something like:
+        #
+        #   async with aiohttp.ClientSession() as session:
+        #       params = { "q": query, "key": "YOUR_API_KEY" ... }
+        #       async with session.get("https://www.googleapis.com/customsearch/v1", params=params) as resp:
+        #           data = await resp.json()
+        #           # Convert 'data' to HTML
+        #           return convert_data_to_html(data)
+        #
+        # For now, we just return a fake HTML doc:
+        fake_results_html = f"""
+    <html>
+      <body>
+        <h1>Search results for: {query}</h1>
+        <ul>
+          <li><a href="http://example.com/result1">Fake result 1 for {query}</a></li>
+          <li><a href="http://example.com/result2">Fake result 2 for {query}</a></li>
+        </ul>
+      </body>
+    </html>
+    """
+        return fake_results_html
+
+    async def _perform_internet_fetch(self, url: str) -> str:
+        """
+        Async function to fetch the HTML (or other content) from a URL.
+        You can replace this with real logic using aiohttp or requests-async, etc.
+        """
+        import aiohttp
+        
+        # We'll do a quick GET request and return the response text as HTML
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    raise Exception(f"HTTP {resp.status} error fetching {url}.")
+                content_type = resp.headers.get("Content-Type", "")
+                text = await resp.text()
+
+        # text is the raw HTML (or other content). You can store as-is.
+        # Optionally, if you want to store it strictly as HTML, ensure 'Content-Type' is suitable
+        # or parse it, transform it, etc.
+        return text

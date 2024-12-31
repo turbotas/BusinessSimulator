@@ -8,7 +8,7 @@ class BaseAgent:
     COMMAND_DEFINITIONS = {
         "message_agent": {
             "description": "Send a message to another agent.",
-            "syntax": "message_agent <target_agent_id> <message>"
+            "syntax": "message_agent <agent_id> <message>"
         },
         "message_role": {
             "description": "Send a message to all agents with given role.",
@@ -32,14 +32,14 @@ class BaseAgent:
         },
         "spawn": {
             "description": "Create a new agent with the given role. You can use this to get new agents onboard fitting a given role pattern.",
-            "syntax": "spawn <role>"
+            "syntax": "spawn <role_id>"
         },
         "status": {
             "description": "Report the current status of the current agent. Normally this is for admin purposes only.",
             "syntax": "status"
         },
         "broadcast": {
-            "description": "Send a message to all other agents. Only use this for important communications that every agent must see. Probably it needs your boss to carry this out.",
+            "description": "Send a message to all other agents. Only use this for important communications that every agent must see. Probably it needs your boss to carry this out. Do NOT respond to a broadcast with a broadcast command as this will create a message storm.  If a response is required, use the message_agent command instead.",
             "syntax": "broadcast <message>"
         },
         "flush_tasks": {
@@ -49,6 +49,18 @@ class BaseAgent:
         "terminate_agent": {
             "description": "Terminate and remove a specific agent. Normally this would be one of your direct reports.",
             "syntax": "terminate_agent <agent_id>"
+        },
+        "no_command": {
+            "description": "No other command needs executing at the moment.",
+            "syntax": "no_command"
+        },
+        "internet_search": {
+            "description": "Search the internet for information.",
+            "syntax": "internet_search <search string>"
+        },
+        "internet_fetch": {
+            "description": "fetch the given URL.",
+            "syntax": "internet_fetch <URL>"
         }
     }
     
@@ -90,31 +102,19 @@ class BaseAgent:
                 return await self.send_message_role(target_role, message, simulation_context)
             elif command.startswith("status"):
                 return f"{self.agent_id} is currently {self.state}."
-            elif command.startswith("broadcast_old"):
-                # Extract the message
-                _, *message_parts = command.split(maxsplit=1)
-                message = " ".join(message_parts)
-                # Broadcast to all agents
-                active_agents = simulation_context["agent_manager"].get_active_agents()
-                results = []
-                for agent_id in active_agents:
-                    if agent_id != self.agent_id:  # Avoid sending to self
-                        result = await self.send_message(agent_id, message, simulation_context)
-                        results.append(result)
-                return "Broadcast complete. Results:\n" + "\n".join(results)
             elif command.startswith("flush_tasks"):
                 simulation_context["task_queue"].flush_tasks()
                 return "Task queue flushed successfully."
 
             # Running in command_processor    
             elif command.startswith("list_agents"):
-                print(f"DEBUG: {self.agent_id} is invoking command_processor for 'list_agents'.")
+                #print(f"DEBUG: {self.agent_id} is invoking command_processor for 'list_agents'.")
                 
                 # Use the command processor to handle the 'list_agents' request
                 result = await self.command_processor.process_command("list_agents", {
                     "caller": self.agent_id
                 })
-                print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
+                #print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
                 return result  
             elif command.startswith("list_roles"):
                 # Use the command processor to handle the 'list_roles' request
@@ -133,45 +133,65 @@ class BaseAgent:
                 #print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
                 return result
             elif command.startswith("role_info"):
-                print(f"DEBUG: {self.agent_id} is invoking command_processor for 'role_info'.")
+                #print(f"DEBUG: {self.agent_id} is invoking command_processor for 'role_info'.")
                 
                 # Use the command processor to handle the 'list_roles' request
                 result = await self.command_processor.process_command(command, {
                     "caller": self.agent_id  # optional, if we want to queue results back
                 })
                 # or we can just return the string to the agent.
-                print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
+                #print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
                 return result
             elif command.startswith("spawn"):
-                print(f"DEBUG: {self.agent_id} is invoking command_processor for 'spawn'.")
+                #print(f"DEBUG: {self.agent_id} is invoking command_processor for 'spawn'.")
                 
                 # Use the command processor to handle the 'spawn' request
                 result = await self.command_processor.process_command(command, {
                     "caller": self.agent_id  # optional, if we want to queue results back
                 })
                 # or we can just return the string to the agent.
-                print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
+                #print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
                 return result
             elif command.startswith("terminate_agent"):
-                print(f"DEBUG: {self.agent_id} is invoking command_processor for 'terminate_agent'.")
+                #print(f"DEBUG: {self.agent_id} is invoking command_processor for 'terminate_agent'.")
                 
                 # Use the command processor to handle the 'terminate_agent' request
                 result = await self.command_processor.process_command(command, {
                     "caller": self.agent_id  # optional, if we want to queue results back
                 })
                 # or we can just return the string to the agent.
-                print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
+                #print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
                 return result
             elif command.startswith("broadcast"):
-                print(f"DEBUG: {self.agent_id} is invoking command_processor for 'broadcast'.")
+                #print(f"DEBUG: {self.agent_id} is invoking command_processor for 'broadcast'.")
                 
                 # Use the command processor to handle the 'broadcast' request
                 result = await self.command_processor.process_command(command, {
                     "caller": self.agent_id  # optional, if we want to queue results back
                 })
                 # or we can just return the string to the agent.
+                #print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
+                return result
+            elif command.startswith("internet_search"):
+                print(f"DEBUG: {self.agent_id} is invoking command_processor for 'internet_search'.")
+                
+                # Use the command processor to handle the 'internet_search' request
+                result = await self.command_processor.process_command(command, {
+                    "caller": self.agent_id  # optional, if we want to queue results back
+                })
+                # or we can just return the string to the agent.
                 print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
-                return result                   
+                return result
+            elif command.startswith("internet_fetch"):
+                print(f"DEBUG: {self.agent_id} is invoking command_processor for 'internet_fetch'.")
+                
+                # Use the command processor to handle the 'internet_fetch' request
+                result = await self.command_processor.process_command(command, {
+                    "caller": self.agent_id  # optional, if we want to queue results back
+                })
+                # or we can just return the string to the agent.
+                print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
+                return result    
             else:
                 return f"Unknown command: {command}"
 
@@ -199,12 +219,10 @@ class BaseAgent:
             f"You are agent {self.agent_id}, "
             f"the {self.params.get('description', 'role description not provided')}.\n"
             f"{self.params.get('prompt', 'act within your capacity')}.\n\n"
-            f"Commands you can execute are:\n{commands_help}.\n"
-            "Commands must start on a blank line. If you have no command, nothing will be done.\n\n"
+            f"Commands you can execute to help achieve your goals are:\n{commands_help}.\n\n"
             f"Your direct supervisor by role_id is: {self.params.get('boss', 'None')}.\n"
             f"Your direct reports by role_id are: {', '.join(self.subordinates) or 'None'}.\n\n"
-            f"The current list of agents in this organization is: {current_agent_list}."
-
+            f"The current list of agents in this organization is: {current_agent_list}.\n"
         )
 
         # Task-specific user prompt
@@ -212,7 +230,11 @@ class BaseAgent:
             f"Task: {task['description']}\n"
             "Respond in the context of your role. Be precise and succinct. Only communicate if necessary "
             "to achieve your task. Use at least one command unless no action is required. "
-            "Multiple commands must each start on their own line. Previous chat history is provided with you as 'Assistant'. DO NOT simply send innanities back and forth."
+            "Multiple commands must each start on their own line. Previous chat history is "
+            "provided with you as 'Assistant'. DO NOT simply send innanities back and forth "
+            "to agents as it is not helpful to clog up the system with thankyou messages. "
+            "You may need to cut your task up into sub tasks and assign them to other agents "
+            "to complete\n"
         )
 
         # Query the AI with the clean conversation history

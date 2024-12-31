@@ -459,7 +459,13 @@ class SimulationController:
                     print(result)
                 elif command.startswith ("broadcast"):
                     result = await self.command_processor.process_command(command)
-                    print(result)                     
+                    print(result)
+                elif command.startswith ("internet_search"):
+                    result = await self.command_processor.process_command(command)
+                    print(result)
+                elif command.startswith ("internet_fetch"):
+                    result = await self.command_processor.process_command(command)
+                    print(result)  
                 else:
                     print("Unknown command. Type 'help' for a list of commands.")
             except Exception as e:
