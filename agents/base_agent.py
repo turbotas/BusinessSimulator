@@ -88,11 +88,9 @@ class BaseAgent:
                 message = " ".join(message_parts)
                 # Use send_message to queue the message
                 return await self.send_message_role(target_role, message, simulation_context)
-            elif command.startswith("list_agents_old"):
-                return f"Active agents: {simulation_context['agent_manager'].get_active_agents()}"
             elif command.startswith("status"):
                 return f"{self.agent_id} is currently {self.state}."
-            elif command.startswith("broadcast"):
+            elif command.startswith("broadcast_old"):
                 # Extract the message
                 _, *message_parts = command.split(maxsplit=1)
                 message = " ".join(message_parts)
@@ -107,11 +105,8 @@ class BaseAgent:
             elif command.startswith("flush_tasks"):
                 simulation_context["task_queue"].flush_tasks()
                 return "Task queue flushed successfully."
-            elif command.startswith("terminate_agent"):
-                _, target_agent = command.split(maxsplit=1)
-                result = simulation_context["agent_manager"].terminate_agent(target_agent)
-                return result
 
+            # Running in command_processor    
             elif command.startswith("list_agents"):
                 print(f"DEBUG: {self.agent_id} is invoking command_processor for 'list_agents'.")
                 
@@ -156,7 +151,27 @@ class BaseAgent:
                 })
                 # or we can just return the string to the agent.
                 print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
-                return result                 
+                return result
+            elif command.startswith("terminate_agent"):
+                print(f"DEBUG: {self.agent_id} is invoking command_processor for 'terminate_agent'.")
+                
+                # Use the command processor to handle the 'terminate_agent' request
+                result = await self.command_processor.process_command(command, {
+                    "caller": self.agent_id  # optional, if we want to queue results back
+                })
+                # or we can just return the string to the agent.
+                print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
+                return result
+            elif command.startswith("broadcast"):
+                print(f"DEBUG: {self.agent_id} is invoking command_processor for 'broadcast'.")
+                
+                # Use the command processor to handle the 'broadcast' request
+                result = await self.command_processor.process_command(command, {
+                    "caller": self.agent_id  # optional, if we want to queue results back
+                })
+                # or we can just return the string to the agent.
+                print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
+                return result                   
             else:
                 return f"Unknown command: {command}"
 

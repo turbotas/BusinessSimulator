@@ -209,6 +209,7 @@ class CommandProcessor:
                 Example: spawn CFO
                 Spawns a new agent with the given role, if that role is defined in the roles library.
                 This version is fully async, and also pushes the result back to the caller if it's an agent.
+                Additionally, it checks if we're at the 'max_count' for that role.
                 """
                 tokens = command.split(maxsplit=1)
                 if len(tokens) < 2:
@@ -242,15 +243,35 @@ class CommandProcessor:
                     "gpt_version": role_params.get("gpt_version", "gpt-4o"),
                 }
 
+                # 3a) Check the "max_count" for this role, if any
+                max_count = role_params.get("max_count", "Unlimited")  # or None if not specified
+
                 # 4) Access the AgentManager from global context
                 agent_manager = self.global_context.agent_manager
                 if not agent_manager:
                     return "Error: AgentManager is not available; cannot spawn agents."
 
+                # 4a) Count how many agents currently exist with this role
+                if max_count != "Unlimited":
+                    try:
+                        max_count_int = int(max_count)  # In case it's stored as a string
+                        # Count how many agents currently have this role
+                        current_count = sum(
+                            1 for aid, agent in agent_manager.agents.items()
+                            if agent.params.get("role") == role_name
+                        )
+                        if current_count >= max_count_int:
+                            # We've reached or exceeded the limit, so reject the spawn
+                            return (
+                                f"Cannot spawn another '{role_name}'. "
+                                f"Maximum allowed agents for this role ({max_count_int}) already reached."
+                            )
+                    except ValueError:
+                        # If "max_count" wasn't an integer or "Unlimited", do what you prefer
+                        pass
+
                 # 5) Actually spawn the agent (asynchronously)
                 try:
-                    # Because process_command is presumably called in an async context,
-                    # we can just await spawn_agent instead of using asyncio.run.
                     agent_id = await agent_manager.spawn_agent(role_name, agent_params, self)
                 except Exception as e:
                     return f"Error spawning agent of role '{role_name}': {str(e)}"
@@ -270,6 +291,115 @@ class CommandProcessor:
 
                 # 7) Return final output so the CLI or calling agent sees it immediately
                 return final_output
+            elif command.startswith("terminate_agent"):
+                """
+                Command: terminate_agent <agent_id>
+                Example: terminate_agent CTO_1
+                Terminates the specified agent, ensuring we do not go below the min_count for that agent's role.
+                """
+                tokens = command.split(maxsplit=1)
+                if len(tokens) < 2:
+                    return "Usage: terminate_agent <agent_id>"
+
+                agent_id = tokens[1].strip()
+
+                # 1) Access the AgentManager from the global context
+                agent_manager = self.global_context.agent_manager
+                if not agent_manager:
+                    return "Error: AgentManager is not available; cannot terminate agents."
+
+                # 2) Check if the agent exists
+                if agent_id not in agent_manager.agents:
+                    return f"Agent '{agent_id}' not found. Available agents: {list(agent_manager.agents.keys())}"
+
+                # 3) Fetch the agent and determine its role
+                agent = agent_manager.agents[agent_id]
+                role = agent.params.get("role")
+                if not role:
+                    return f"Agent '{agent_id}' has no known role; cannot validate min_count."
+
+                # 4) Access the roles library to find min_count
+                roles_library = self.global_context.roles_library
+                if not roles_library or role not in roles_library:
+                    return (f"Cannot find role '{role}' in the roles library. "
+                            "Ensure that role definitions are loaded.")
+
+                role_params = roles_library[role]
+                min_count = role_params.get("min_count", 0)  # Could be int or "Unlimited"
+
+                # Convert min_count to int (if possible); if it's "Unlimited" or invalid, treat as 0
+                try:
+                    min_count_int = int(min_count)
+                except (ValueError, TypeError):
+                    min_count_int = 0  # default to 0 if not a valid integer
+
+                # 5) Count how many agents currently have this role
+                current_count = sum(
+                    1 for aid, a in agent_manager.agents.items()
+                    if a.params.get("role") == role
+                )
+
+                # 6) If removing this agent would drop us below min_count, disallow
+                if current_count <= min_count_int:
+                    return (f"Cannot remove agent '{agent_id}' of role '{role}' because the minimum "
+                            f"count of {min_count_int} would be violated.")
+
+                # 7) If the check passes, terminate the agent
+                agent_manager.terminate_agent(agent_id)
+                final_output = f"Agent '{agent_id}' (role: {role}) terminated successfully."
+
+                # 8) If there's a caller agent, queue the result as a new "task"
+                caller_id = simulation_context.get("caller") if simulation_context else None
+                if caller_id and caller_id in agent_manager.agents:
+                    target_agent = agent_manager.agents[caller_id]
+                    new_task = {
+                        "id": f"terminate_result-{len(target_agent.message_queue._queue)+1}",
+                        "description": f"Command Output (terminate_agent {agent_id}):\n{final_output}",
+                        "priority": "medium",
+                    }
+                    target_agent.message_queue.put_nowait(new_task)
+
+                # 9) Return the result to whichever CLI/agent invoked the command
+                return final_output
+            elif command.startswith("broadcast"):
+                """
+                Command: broadcast <message>
+                Example: broadcast Hello everyone!
+                Sends a message to all agents (except the caller, if the caller is an agent).
+                """
+                tokens = command.split(maxsplit=1)
+                if len(tokens) < 2:
+                    return "Usage: broadcast <message>"
+
+                broadcast_msg = tokens[1].strip()
+
+                # 1) Access the agent manager from the global context
+                agent_manager = self.global_context.agent_manager
+                if not agent_manager:
+                    return "Error: AgentManager is not available; cannot broadcast."
+
+                # 2) Determine the caller (if any)
+                caller_id = simulation_context.get("caller") if simulation_context else None
+
+                # 3) Get the list of active agents
+                active_agents = agent_manager.get_active_agents()
+                if not active_agents:
+                    return "No active agents to broadcast to."
+
+                # 4) For each agent (except the caller), send a message
+                results = []
+                for agent_id in active_agents:
+                    if agent_id == caller_id:
+                        # skip sending to self if the caller is an agent
+                        continue
+
+                    # We'll reuse your message-sending logic. If you have a helper like `await self.send_message_agent`
+                    # or some other method, you can call that. Otherwise, replicate the code in your base_agent's send_message_agent.
+                    result = await self._send_message_to_agent(agent_id, broadcast_msg)
+                    results.append(result)
+
+                final_output = "Broadcast complete. Results:\n" + "\n".join(results)
+                return final_output
 
 
             else:
@@ -277,3 +407,20 @@ class CommandProcessor:
 
         except Exception as e:
             return f"\033[31mError processing command: {str(e)}\033[0m"
+
+    async def _send_message_to_agent(self, to_agent_id: str, message: str) -> str:
+        """
+        A small helper to queue a message task to the given agent.
+        """
+        agent_manager = self.global_context.agent_manager
+        if not agent_manager or to_agent_id not in agent_manager.agents:
+            return f"Message failed: Agent {to_agent_id} not found."
+
+        target_agent = agent_manager.agents[to_agent_id]
+        task = {
+            "id": f"msg-broadcast-{len(target_agent.message_queue._queue) + 1}",
+            "description": f"[Broadcast]: {message}",
+            "priority": "medium"
+        }
+        target_agent.message_queue.put_nowait(task)
+        return f"Message successfully sent to {to_agent_id}."

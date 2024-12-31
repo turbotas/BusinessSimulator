@@ -423,16 +423,6 @@ class SimulationController:
                         continue
                     self.task_queue.flush_tasks()
                     print("Task queue flushed successfully.")
-                elif command.startswith("terminate_agent"):
-                    if not self.agent_manager:
-                        print("Simulation not started. Use 'start' command first.")
-                        continue
-                    try:
-                        _, agent_id = command.split(maxsplit=1)
-                        result = self.agent_manager.terminate_agent(agent_id)
-                        print(result)
-                    except ValueError:
-                        print("Usage: kill_agent <agent_id>")
                 elif command.startswith("agent_info"):
                     try:
                         _, agent_id = command.split(maxsplit=1)
@@ -463,7 +453,13 @@ class SimulationController:
                     print(result)
                 elif command.startswith ("spawn"):
                     result = await self.command_processor.process_command(command)
-                    print(result)                      
+                    print(result)
+                elif command.startswith ("terminate_agent"):
+                    result = await self.command_processor.process_command(command)
+                    print(result)
+                elif command.startswith ("broadcast"):
+                    result = await self.command_processor.process_command(command)
+                    print(result)                     
                 else:
                     print("Unknown command. Type 'help' for a list of commands.")
             except Exception as e:
