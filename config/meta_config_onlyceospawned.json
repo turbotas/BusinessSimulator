@@ -112,11 +112,7 @@
         }
     ],
     "initial_agents": [
-        { "name": "CEO", "role": "CEO" },
-        { "name": "CTO", "role": "CTO" },
-        { "name": "CFO", "role": "CFO" },
-        { "name": "COO", "role": "COO" },
-		{ "name": "CIO", "role": "CIO" }
+        { "name": "CEO", "role": "CEO" }
     ],
     "initial_tasks": [
         {
@@ -124,12 +120,6 @@
             "description": [
                 "Describe your role in 50 words, including your reporting structure.",
 				"Message one of your subordinates.  They don't need to respond."
-            ]
-        },
-        {
-            "assigned_role": "COO",
-            "description": [
-                "Describe your role in 50 words, including your reporting structure."
             ]
         }
     ]

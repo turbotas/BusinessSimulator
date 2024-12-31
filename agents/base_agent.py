@@ -19,11 +19,19 @@ class BaseAgent:
             "syntax": "list_agents"
         },
         "list_roles": {
-            "description": "List all possible roles.",
+            "description": "List all possible roles (response format: role_id:role description).",
             "syntax": "list_roles"
         },
+        "debug_agent": {
+            "description": "Debug an agent.",
+            "syntax": "debug_agent <agent_id>"
+        },
+        "role_info": {
+            "description": "Get information about a role.",
+            "syntax": "role_info <role_id>"
+        },
         "spawn": {
-            "description": "Create a new agent with the given role.",
+            "description": "Create a new agent with the given role. You can use this to get new agents onboard fitting a given role pattern.",
             "syntax": "spawn <role>"
         },
         "status": {
@@ -80,7 +88,7 @@ class BaseAgent:
                 message = " ".join(message_parts)
                 # Use send_message to queue the message
                 return await self.send_message_role(target_role, message, simulation_context)
-            elif command.startswith("list_agents"):
+            elif command.startswith("list_agents_old"):
                 return f"Active agents: {simulation_context['agent_manager'].get_active_agents()}"
             elif command.startswith("status"):
                 return f"{self.agent_id} is currently {self.state}."
@@ -103,17 +111,52 @@ class BaseAgent:
                 _, target_agent = command.split(maxsplit=1)
                 result = simulation_context["agent_manager"].terminate_agent(target_agent)
                 return result
-            elif command.startswith("list_roles"):
-                print(f"DEBUG: {self.agent_id} is invoking command_processor for 'list_roles'.")
+
+            elif command.startswith("list_agents"):
+                print(f"DEBUG: {self.agent_id} is invoking command_processor for 'list_agents'.")
                 
-                # Use the command processor to handle the 'list_roles' request
-                result = self.command_processor.process_command("list_roles", {
-                    "caller": self.agent_id,
-                    "agent_manager": simulation_context["agent_manager"],
-                    "roles_library": simulation_context["roles_library"]
+                # Use the command processor to handle the 'list_agents' request
+                result = await self.command_processor.process_command("list_agents", {
+                    "caller": self.agent_id
                 })
                 print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
                 return result  
+            elif command.startswith("list_roles"):
+                # Use the command processor to handle the 'list_roles' request
+                result = await self.command_processor.process_command("list_roles", {
+                    "caller": self.agent_id
+                })
+                return result
+            elif command.startswith("debug_agent"):
+                #print(f"DEBUG: {self.agent_id} is invoking command_processor for 'debug_agent'.")
+                
+                # Use the command processor to handle the 'list_roles' request
+                result = await self.command_processor.process_command(command, {
+                    "caller": self.agent_id  # optional, if we want to queue results back
+                })
+                # or we can just return the string to the agent.
+                #print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
+                return result
+            elif command.startswith("role_info"):
+                print(f"DEBUG: {self.agent_id} is invoking command_processor for 'role_info'.")
+                
+                # Use the command processor to handle the 'list_roles' request
+                result = await self.command_processor.process_command(command, {
+                    "caller": self.agent_id  # optional, if we want to queue results back
+                })
+                # or we can just return the string to the agent.
+                print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
+                return result
+            elif command.startswith("spawn"):
+                print(f"DEBUG: {self.agent_id} is invoking command_processor for 'spawn'.")
+                
+                # Use the command processor to handle the 'spawn' request
+                result = await self.command_processor.process_command(command, {
+                    "caller": self.agent_id  # optional, if we want to queue results back
+                })
+                # or we can just return the string to the agent.
+                print(f"DEBUG: {self.agent_id} got result back from command_processor: {result}")
+                return result                 
             else:
                 return f"Unknown command: {command}"
 

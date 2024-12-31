@@ -343,58 +343,7 @@ class SimulationController:
                 elif command == "resume":
                     self.resume_simulation()
                 elif command == "stop":
-                    self.stop_simulation()
-                elif command.startswith("spawn"):
-                    if not self.agent_manager:
-                        print("Simulation not started. Use 'start' command first.")
-                        continue
-                    try:
-                        _, role = command.split(maxsplit=1)  # Extract the role to spawn
-                        role = role.strip()
-
-                        # Validate if the role exists in the roles library
-                        if role not in self.roles_library:
-                            print(f"Error: Role '{role}' is not defined in the roles library. Use a valid role.")
-                            print(f"Available roles: {', '.join(self.roles_library.keys())}")
-                            continue
-
-                        # Role is valid, fetch role parameters
-                        role_params = self.roles_library[role]
-
-                        # Generate a unique agent name for this role
-                        #agent_name = f"{role}_{len(self.agent_manager.get_active_agents()) + 1}"
-                        agent_name = f"{role}"
-
-                        # Spawn the agent with the validated parameters
-                        agent_params = {
-                            "name": agent_name,
-                            "description": role_params.get("description", "No description provided."),
-                            "prompt": role_params.get("prompt", ""),
-                            "boss": role_params.get("boss"),
-                            "subordinates": role_params.get("subordinates", []),
-                            "role": role,
-                            "gpt_version": role_params.get("gpt_version", self.config.get("default_gpt_version", "gpt-4o")),
-                        }
-                        agent_id = await self.agent_manager.spawn_agent(role, agent_params, self.command_processor)
-                        print(f"Successfully spawned agent '{agent_id}' with role '{role}'.")
-                    except ValueError:
-                        print("Usage: spawn <role>")
-                elif command == "list_agents":
-                    if not self.agent_manager:
-                        print("Simulation not started. Use 'start' command first.")
-                        continue
-
-                    active_agents = self.agent_manager.get_active_agents()
-                    if not active_agents:
-                        print("No active agents currently in the simulation.")
-                        continue
-
-                    print("\n\033[36mActive Agents:\033[0m")
-                    for agent_id in active_agents:
-                        agent = self.agent_manager.agents.get(agent_id)
-                        role_name = agent.params.get("role", "Unknown Role")
-                        print(f"  \033[32m{agent_id}:\033[0m {role_name}")
-                    print("")                   
+                    self.stop_simulation()               
                 elif command.startswith("add_task"):
                     _, *task_parts = command.split(maxsplit=1)
                     task_desc = " ".join(task_parts)
@@ -498,45 +447,23 @@ class SimulationController:
                             print("\033[33m---------------------------\033[0m\n")
                     except ValueError:
                         print("Usage: agent_info <agent_id>")
-                elif command.startswith("role_info"):
-                    parts = command.split(maxsplit=1)
-                    if len(parts) < 2:
-                        print("Usage: role_info <role>")
-                        continue
-                    role_name = parts[1].strip()
-                    # Check if the role exists in the roles library
-                    if role_name not in self.roles_library:
-                        print(f"Error: Role '{role_name}' not found in the roles library.")
-                        print(f"Available roles: {', '.join(self.roles_library.keys())}")
-                        continue
-                    # Fetch and display the role information
-                    role_info = self.roles_library[role_name]
-                    print("\n\033[36mRole Information:\033[0m")
-                    print(f"  \033[32mRole:\033[0m {role_name}")
-                    print(f"  \033[32mDescription:\033[0m {role_info.get('description', 'No description available.')}")
-                    print(f"  \033[32mPrompt:\033[0m {role_info.get('prompt', 'No prompt available.')}")
-                    print(f"  \033[32mBoss:\033[0m {role_info.get('boss', 'None')}")
-                    print(f"  \033[32mSubordinates:\033[0m {', '.join(role_info.get('subordinates', [])) or 'None'}")
-                    print(f"  \033[32mGPT Version:\033[0m {role_info.get('gpt_version', 'Default')}")
-                    print(f"  \033[32mMinimum Count:\033[0m {role_info.get('min_count', 0)}")
-                    print(f"  \033[32mMaximum Count:\033[0m {role_info.get('max_count', 'Unlimited')}\n")
-                elif command == "list_roles":
-                    result = self.command_processor.process_command("list_roles", {"roles_library": self.roles_library})
-                    print(result)                
-                elif command.startswith("debug_agent"):
-                    if not self.agent_manager:
-                        print("Simulation not started. Use 'start' command first.")
-                        continue
-                    try:
-                        _, agent_id = command.split(maxsplit=1)
-                        agent_id = agent_id.strip()
-                        if agent_id in self.agent_manager.agents:
-                            self.debug_agent(agent_id)  # Pass the agent ID, not the object
-                        else:
-                            print(f"Agent {agent_id} not found.")
-                    except ValueError:
-                        print("Usage: debug_agent <agent_id>")
- 
+
+                # Commands moved to command_processor
+                elif command.startswith ("list_agents"):
+                    result = await self.command_processor.process_command("list_agents", { })
+                    print(result)   
+                elif command.startswith ("list_roles"):
+                    result = await self.command_processor.process_command("list_roles", { })
+                    print(result)
+                elif command.startswith ("debug_agent"):
+                    result = await self.command_processor.process_command(command)
+                    print(result)
+                elif command.startswith ("role_info"):
+                    result = await self.command_processor.process_command(command)
+                    print(result)
+                elif command.startswith ("spawn"):
+                    result = await self.command_processor.process_command(command)
+                    print(result)                      
                 else:
                     print("Unknown command. Type 'help' for a list of commands.")
             except Exception as e:
