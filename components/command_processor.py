@@ -29,7 +29,9 @@ class CommandProcessor:
 
                 # STEP 4: If a caller is an agent, place the final_output in that agent's queue
                 caller_id = simulation_context.get("caller")  # Could be "CEO_1", "CTO_2", etc.
-                agent_manager = simulation_context.get("agent_manager")
+                
+                # We'll fetch the AgentManager from the global context
+                agent_manager = self.global_context.agent_manager
                 
                 # Debug line: see if we even get here
                 print(f"DEBUG: list_roles command recognized. caller={caller_id}, agent_manager={agent_manager}")
